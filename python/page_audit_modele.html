@@ -1,0 +1,326 @@
+<title>Audit EDEN / FAOSTAT</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Condensed:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Mise en page : note d'étude sur une colonne de lecture (68 caractères), figures et tableaux en pleine largeur, tableaux à bandeau comme dans un bulletin statistique. */
+:root{
+  --bg:#f5f7f5; --surface:#fcfcfb; --ink:#13201c; --ink-2:#4a5853; --muted:#7c8782; --rule:#dde2de; --axis:#c2c9c4;
+  --band:#0f5c4d; --band-ink:#ffffff; --soft:#e9efec;
+  --eden:#2a78d6; --fao:#eb6834; --neutral:#9aa39f;
+  --f-head:"IBM Plex Sans Condensed","Arial Narrow",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-num:"IBM Plex Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e1312; --surface:#1a1a19; --ink:#f0f4f2; --ink-2:#b8c3be; --muted:#87928d; --rule:#2a312f; --axis:#3a423f;
+  --band:#17483e; --band-ink:#eaf5f1; --soft:#1c2422;
+  --eden:#3987e5; --fao:#d95926; --neutral:#6d7773; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0e1312; --surface:#1a1a19; --ink:#f0f4f2; --ink-2:#b8c3be; --muted:#87928d; --rule:#2a312f; --axis:#3a423f;
+  --band:#17483e; --band-ink:#eaf5f1; --soft:#1c2422;
+  --eden:#3987e5; --fao:#d95926; --neutral:#6d7773; color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.55;margin:0}
+.wrap{max-width:1120px;margin:0 auto;padding-inline:20px;padding-block:36px 64px;display:flex;flex-direction:column;gap:40px}
+.prose{max-width:68ch;display:flex;flex-direction:column;gap:14px}
+.prose p{margin:0}
+h1{font-family:var(--f-head);font-weight:600;font-size:clamp(1.9rem,4.5vw,2.7rem);line-height:1.1;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font-family:var(--f-head);font-weight:600;font-size:1.45rem;line-height:1.2;margin:0;text-wrap:balance}
+h3{font-family:var(--f-head);font-weight:600;font-size:1.08rem;margin:0}
+.kicker{font-family:var(--f-head);font-weight:500;font-size:.8rem;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-2);margin:0}
+.lede{font-size:1.12rem;color:var(--ink)}
+section{display:flex;flex-direction:column;gap:18px}
+.note{font-size:.85rem;color:var(--ink-2);max-width:80ch;margin:0}
+code{font-family:var(--f-num);font-size:.88em;background:var(--soft);padding:.05em .3em;border-radius:3px;overflow-wrap:anywhere}
+.prose,.src,.note{overflow-wrap:break-word}
+.src li{overflow-wrap:anywhere}
+a{color:inherit;text-decoration-color:var(--muted);text-underline-offset:3px}
+a:focus-visible,button:focus-visible,svg:focus-visible{outline:2px solid var(--eden);outline-offset:2px}
+/* figures */
+.fig{background:var(--surface);border:1px solid var(--rule);border-radius:6px;padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.fig h3{font-size:1.05rem}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.controls>span{display:flex;flex-wrap:wrap;align-items:center;gap:4px 0;min-width:0}
+.seg{display:inline-flex;flex-wrap:wrap;max-width:100%;border:1px solid var(--axis);border-radius:5px;overflow:hidden}
+.seg button{font:500 .84rem var(--f-body);background:transparent;color:var(--ink-2);border:0;padding:6px 11px;cursor:pointer}
+.seg button+button{border-left:1px solid var(--axis)}
+.seg button[aria-pressed="true"]{background:var(--band);color:var(--band-ink)}
+.ctl-label{font:500 .74rem var(--f-head);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-right:6px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.86rem;color:var(--ink-2)}
+.key{display:inline-flex;align-items:center;gap:7px}
+.key i{display:inline-block;width:18px;height:0;border-top:2px solid var(--c)}
+.key b{display:inline-block;width:12px;height:10px;border-radius:2px;background:var(--c)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:18px 16px}
+.panel{min-width:0;display:flex;flex-direction:column;gap:2px}
+.panel h4{font:600 .9rem var(--f-head);margin:0;color:var(--ink)}
+.panel svg{width:100%;height:auto;display:block;touch-action:pan-y}
+svg text{font-family:var(--f-body);fill:var(--muted);font-size:10.5px;font-variant-numeric:tabular-nums}
+.scroll{overflow-x:auto}
+#tip{position:fixed;pointer-events:none;background:var(--surface);color:var(--ink);border:1px solid var(--axis);border-radius:5px;padding:7px 9px;font-size:.8rem;line-height:1.35;box-shadow:0 4px 14px rgba(0,0,0,.14);z-index:5;min-width:130px}
+#tip .d{font:500 .72rem var(--f-head);letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+#tip .r{display:flex;align-items:center;gap:7px;justify-content:space-between}
+#tip .r span{display:inline-flex;align-items:center;gap:6px;color:var(--ink-2)}
+#tip .r i{display:inline-block;width:12px;border-top:2px solid var(--c)}
+#tip .r strong{font-family:var(--f-num);font-weight:500}
+/* tableaux */
+table{border-collapse:collapse;width:100%;font-size:.88rem}
+th,td{padding:7px 10px;text-align:left;border-bottom:1px solid var(--rule);vertical-align:top}
+thead th{background:var(--band);color:var(--band-ink);font:600 .8rem var(--f-head);letter-spacing:.03em;border-bottom:0;white-space:nowrap}
+td.n,th.n{text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums;white-space:nowrap}
+thead th.n{font-family:var(--f-head)}
+tbody tr:last-child td{border-bottom:0}
+td.off{font-weight:500;background:var(--soft)}
+.tri td.n{font-size:.78rem;padding:7px 8px}
+.tri th.n{padding:7px 8px}
+.tablebox{background:var(--surface);border:1px solid var(--rule);border-radius:6px;overflow-x:auto}
+.options{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.opt{border-top:3px solid var(--axis);padding-top:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.opt.reco{border-top-color:var(--band)}
+.opt p{margin:0;font-size:.93rem;color:var(--ink-2)}
+.tag{font:600 .7rem var(--f-head);letter-spacing:.09em;text-transform:uppercase;color:var(--band)}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .tag{color:var(--ink)} }
+:root[data-theme="dark"] .tag{color:var(--ink)}
+ul{margin:0;padding-left:1.15em;display:flex;flex-direction:column;gap:8px}
+.src{font-size:.85rem;color:var(--ink-2)}
+</style>
+
+<div class="wrap">
+  <header class="prose">
+    <p class="kicker">Mémoire UEMOA · contrôle des séries d'inflation · 4 octobre 2026</p>
+    <h1>BCEAO EDEN ou FAOSTAT autour des changements de base de l'IHPC</h1>
+    <p class="lede">Les deux sources donnent la même série, sauf pendant un à deux ans après chaque changement de base. Dans la fenêtre de 2008, EDEN concentre la hausse des prix en janvier puis aplatit le reste de l'année : le saut de janvier 2008 est un effet de raccord, et le profil mensuel de la crise alimentaire y est déformé.</p>
+    <p>Je propose de garder EDEN comme série de base et d'y substituer les variations mensuelles de FAOSTAT dans six fenêtres autour de 2008. Un point reste sans solution dans les fichiers disponibles : le saut de <code>cpi_food</code> en janvier 2008 au Mali et au Niger, présent dans les deux sources.</p>
+  </header>
+
+  <section>
+    <div class="prose">
+      <h2>Hors fenêtres, une seule et même série</h2>
+      <p>Le rapport entre <code>cpi_all_alt</code> et <code>cpi_all</code> est constant à l'arrondi près sur la plus grande partie de l'échantillon. Il ne bouge que dans des fenêtres bien délimitées : 2008-2009 dans sept pays, 2017-2018 au Bénin, en Côte d'Ivoire, au Mali et au Sénégal, 2015-2016 au Burkina Faso, au Niger et au Togo, 2020-2022 en Guinée-Bissau et au Togo. Selon la série, 22 à 94 des 300 mois de l'échantillon principal tombent dans une fenêtre.</p>
+    </div>
+    <div class="fig">
+      <h3>Fenêtres où les variations mensuelles des deux sources diffèrent, 2000-2024</h3>
+      <div class="legend">
+        <span class="key" style="--c:var(--fao)"><b></b>FAOSTAT proposé dans la fenêtre</span>
+        <span class="key" style="--c:var(--eden)"><b></b>Divergence, EDEN conservé</span>
+        <span class="key" style="--c:var(--neutral)"><b></b>À exclure (rétropolation EDEN)</span>
+      </div>
+      <div class="scroll"><svg id="strip" role="img" aria-label="Fenêtres de divergence par pays et par variable"></svg></div>
+      <p class="note">Un mois est dit divergent quand l'écart entre les variations mensuelles des deux sources dépasse 0,3 point. Les mois divergents séparés de six mois au plus forment une fenêtre. Seules les fenêtres de trois mois ou plus sont tracées. Le détail chiffré est dans l'onglet Controle, section J.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Janvier 2008 : un raccord, pas un choc</h2>
+      <p>En Côte d'Ivoire, <code>cpi_all</code> d'EDEN gagne 6,3 % en janvier 2008, contre 1,6 % dans FAOSTAT. Le glissement annuel d'EDEN passe de 1,5 % à 6,7 % en un mois, reste entre 5,0 % et 7,1 % toute l'année, puis retombe à 1,5 % en janvier 2009. Dans FAOSTAT il monte de 2,1 % à 9,7 % entre janvier et septembre. Fin 2009, les deux sources ont cumulé la même hausse depuis décembre 2007 : 7,0 % et 7,2 %.</p>
+      <p>Le même schéma vaut au Mali (4,7 % contre 0,6 %) et au Niger (3,7 % contre −0,1 %). EDEN respecte donc la moyenne annuelle, mais pas le calendrier. La BCEAO situait elle-même le pic de l'Union à 10,8 % en août 2008 ; l'agrégat EDEN donne 9,0 % ce mois-là.</p>
+      <p>Une indicatrice sur janvier 2008 ne répare pas la série : elle retire le saut et laisse un profil trop plat ensuite.</p>
+    </div>
+    <div class="fig" id="sm">
+      <h3 id="sm-title"></h3>
+      <div class="controls">
+        <span><span class="ctl-label">Variable</span><span class="seg" data-k="v"><button data-v="cpi_all" aria-pressed="true">cpi_all</button><button data-v="cpi_food" aria-pressed="false">cpi_food</button></span></span>
+        <span><span class="ctl-label">Période</span><span class="seg" data-k="w"><button data-v="2008" aria-pressed="true">2007-2010</button><button data-v="2017" aria-pressed="false">2015-2019</button></span></span>
+        <span><span class="ctl-label">Mesure</span><span class="seg" data-k="m"><button data-v="yy" aria-pressed="true">Glissement annuel</button><button data-v="lv" aria-pressed="false">Niveau</button><button data-v="mm" aria-pressed="false">Variation mensuelle</button></span></span>
+      </div>
+      <div class="legend">
+        <span class="key" style="--c:var(--eden)"><i></i>BCEAO EDEN</span>
+        <span class="key" style="--c:var(--fao)"><i></i>FAOSTAT</span>
+        <span class="key" style="--c:var(--axis)"><i></i><span id="ref-label"></span></span>
+      </div>
+      <div class="grid" id="panels"></div>
+      <p class="note" id="sm-note"></p>
+    </div>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>Pays</th><th class="n">cpi_all EDEN</th><th class="n">cpi_all FAOSTAT</th><th class="n">cpi_food EDEN</th><th class="n">cpi_food FAOSTAT</th><th class="n">Hors alimentation implicite</th><th>Lecture</th></tr></thead>
+        <tbody id="jan"></tbody>
+      </table>
+    </div>
+    <p class="note">Variation de décembre 2007 à janvier 2008, en %. Hors alimentation implicite : variation qu'il faudrait hors alimentation pour concilier l'indice global de FAOSTAT et le saut de l'alimentation, avec les poids <code>food_weight</code> de l'onglet Pays. Ces poids viennent de l'étude BCEAO de 2023, non de la base 1996 : l'ordre de grandeur compte, pas la décimale.</p>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Alimentation : pas de contre-source dans quatre pays</h2>
+      <p>Pour <code>cpi_food</code>, FAOSTAT reprend la même série qu'EDEN au Bénin, au Burkina Faso et au Mali, et presque la même au Niger. Le saut de janvier 2008 y figure donc des deux côtés et aucune des deux sources ne permet de le contrôler. Seule la Côte d'Ivoire dispose d'une série alimentaire distincte (10,3 % dans EDEN, 2,1 % dans FAOSTAT).</p>
+      <p>L'indice global de FAOSTAT donne un indice indirect. Au Mali et au Niger, une alimentation en hausse de 4,0 % et 5,7 % supposerait un recul de plus de 4 % de tout le reste du panier le même mois : le saut est très probablement un raccord. Au Burkina Faso et au Bénin, l'indice global de l'époque monte aussi (2,7 % et 1,4 %) : la hausse est au moins en partie réelle.</p>
+    </div>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>2015-2018 : deux versions officielles, enjeu plus faible</h2>
+      <p>Après 2015, les écarts tiennent à la version des données plus qu'à une erreur. EDEN reproduit exactement les taux annuels publiés par la BCEAO pour 2015 et 2016, là où FAOSTAT s'en écarte de 1,6 point au Niger. À l'inverse, pour 2017, FAOSTAT reproduit au Bénin, en Côte d'Ivoire, au Mali et au Sénégal les taux publiés en avril 2018 en base 2008, alors qu'EDEN donne 1,8 % au Bénin pour 0,1 % publié : EDEN porte vraisemblablement la série recalculée en base 2014.</p>
+      <p>Les prix alimentaires mondiaux bougent peu sur cette période. Je ne propose pas de substitution : la comparaison des deux séries en robustesse suffit.</p>
+    </div>
+    <div class="tablebox">
+      <table class="tri">
+        <thead><tr><th>Pays</th><th class="n">2008</th><th class="n">2009</th><th class="n">2010</th><th class="n">2015</th><th class="n">2016</th><th class="n">2017</th></tr></thead>
+        <tbody id="ann"></tbody>
+      </table>
+    </div>
+    <p class="note">Inflation en moyenne annuelle, en %. Chaque case donne BCEAO publié · EDEN · FAOSTAT. Fond grisé : une des deux sources s'écarte du chiffre publié de plus de 0,5 point. Sur les 112 pays-années contrôlés (2002-2011 et 2014-2017), EDEN reproduit le chiffre publié à 0,15 point près dans 89 cas et FAOSTAT dans 90. Chiffres BCEAO relevés automatiquement dans les rapports en PDF : à recontrôler avant citation.</p>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Quelle série de base</h2>
+    </div>
+    <div class="options">
+      <div class="opt">
+        <h3>EDEN avec indicatrices</h3>
+        <p>Garde la série officielle telle quelle. L'indicatrice absorbe le saut de janvier 2008 mais pas le profil aplati qui suit : la réponse de l'inflation aux chocs de 2007-2008 serait sous-estimée en Côte d'Ivoire, au Mali et au Niger.</p>
+      </div>
+      <div class="opt">
+        <h3>FAOSTAT partout</h3>
+        <p>Simple à décrire et sans saut en 2008. Mais FAOSTAT s'écarte des taux publiés en 2015-2016 au Niger, au Togo et au Burkina Faso, en 2008 au Bénin et au Sénégal, et sa série de Guinée-Bissau est très heurtée avant 2003.</p>
+      </div>
+      <div class="opt reco">
+        <span class="tag">Proposition</span>
+        <h3>EDEN, variations FAOSTAT dans six fenêtres</h3>
+        <p>EDEN partout, sauf là où son premier mois de fenêtre est un saut de raccord ou là où il s'écarte du taux annuel publié que FAOSTAT reproduit. Comme les deux sources cumulent la même hausse sur ces fenêtres, la série retrouve le niveau d'EDEN ensuite.</p>
+      </div>
+    </div>
+    <div class="tablebox">
+      <table>
+        <thead><tr><th>Série</th><th>Fenêtre où FAOSTAT remplace EDEN</th><th>Motif</th></tr></thead>
+        <tbody>
+          <tr><td>Côte d'Ivoire, <code>cpi_all</code></td><td class="n" style="text-align:left">2008-01 à 2009-11</td><td>Saut de raccord : 6,3 % contre 1,6 %</td></tr>
+          <tr><td>Mali, <code>cpi_all</code></td><td class="n" style="text-align:left">2008-01 à 2009-07</td><td>Saut de raccord : 4,7 % contre 0,6 %</td></tr>
+          <tr><td>Niger, <code>cpi_all</code></td><td class="n" style="text-align:left">2008-01 à 2009-04</td><td>Saut de raccord : 3,7 % contre −0,1 % ; taux 2008 publié 11,3 %, EDEN 10,5 %</td></tr>
+          <tr><td>Guinée-Bissau, <code>cpi_all</code></td><td class="n" style="text-align:left">2008-01 à 2010-03</td><td>Taux 2008 publié 10,4 %, EDEN 7,3 %, FAOSTAT 10,5 %</td></tr>
+          <tr><td>Sénégal, <code>cpi_all</code></td><td class="n" style="text-align:left">2007-08 à 2010-01</td><td>Creux isolé d'EDEN en août 2007 (−5,1 % puis +7,0 %) ; taux 2009 et 2010 publiés reproduits par FAOSTAT seul</td></tr>
+          <tr><td>Côte d'Ivoire, <code>cpi_food</code></td><td class="n" style="text-align:left">2008-01 à 2010-04</td><td>Saut de raccord : 10,3 % contre 2,1 %</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Rien n'est appliqué dans le classeur : la série hybride se construit dans le code en chaînant les variations mensuelles, à partir de cette liste. Les trois variantes (EDEN, FAOSTAT, hybride) peuvent être estimées côte à côte.</p>
+  </section>
+
+  <section>
+    <div class="prose">
+      <h2>Ce qui reste à trancher</h2>
+      <ul>
+        <li><strong>Alimentation au Mali et au Niger, janvier 2008.</strong> Raccord probable, sans série de remplacement. Il faudrait une source d'époque (bulletins des instituts nationaux, FMI) ou une indicatrice de fenêtre par pays, en sachant que le profil qui suit peut être aplati lui aussi.</li>
+        <li><strong>Alimentation au Burkina Faso et au Bénin, janvier 2008.</strong> Hausse plausible. À garder telle quelle, avec un test de sensibilité.</li>
+        <li><strong>Sénégal, <code>cpi_food</code>.</strong> EDEN a le même creux isolé en août 2007 (−6,3 % puis +10,0 %), mais les deux sources ne cumulent pas la même hausse sur la fenêtre : je n'ai pas proposé de substitution.</li>
+        <li><strong>Guinée-Bissau avant 2002-07.</strong> À exclure de l'estimation : <code>cpi_all</code> d'EDEN y est une rétropolation et <code>cpi_food</code> est absent.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="src">
+    <h3>Sources</h3>
+    <ul>
+      <li>Séries : classeur <code>20261004_final_data_project_research_UEMOA_consolidated.xlsx</code>, onglets pays (<code>cpi_all</code>, <code>cpi_food</code> : BCEAO EDEN ; <code>cpi_all_alt</code>, <code>cpi_food_alt</code> : FAOSTAT).</li>
+      <li><a href="https://www.bceao.int/sites/default/files/2017-12/Rapport_sur_l_evolution_des_prix_a_la_consommation_dans_l_UEMOA_sur_les_dix_dernieres_annees_(2002_2011).pdf">BCEAO, Rapport sur l'évolution des prix à la consommation dans l'UEMOA, 2002-2011</a> : taux annuels par pays, pic d'août 2008.</li>
+      <li><a href="https://www.bceao.int/sites/default/files/2017-11/rapport_sur_l_evolution_des_prix_a_la_consommation_dans_l_uemoa_en_2016_et_perspectives.pdf">BCEAO, Rapport sur l'évolution des prix en 2016</a> : taux annuels 2014-2016.</li>
+      <li><a href="https://www.bceao.int/sites/default/files/2018-04/Rapport%20sur%20l'%C3%A9volution%20des%20prix%20%C3%A0%20la%20consommation%20dans%20l'UEMOA%20en%202017%20et%20perspectives.pdf">BCEAO, Rapport sur l'évolution des prix en 2017</a> : taux annuels 2017, indices en base 2008.</li>
+    </ul>
+  </section>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const D = /*DATA*/;
+const NAMES = {BEN:"Bénin",BFA:"Burkina Faso",CIV:"Côte d'Ivoire",GNB:"Guinée-Bissau",MLI:"Mali",NER:"Niger",SEN:"Sénégal",TGO:"Togo"};
+const MOIS = ["janv.","févr.","mars","avr.","mai","juin","juil.","août","sept.","oct.","nov.","déc."];
+const fr = (x,n=1) => x==null||isNaN(x) ? "n.d." : x.toFixed(n).replace(".",",").replace("-","−");
+const NS = "http://www.w3.org/2000/svg";
+const el = (t,a={},p) => { const e=document.createElementNS(NS,t); for(const k in a) e.setAttribute(k,a[k]); if(p) p.appendChild(e); return e; };
+const tip = document.getElementById("tip");
+function showTip(x,y,build){ tip.replaceChildren(); build(tip); tip.hidden=false;
+  const r=tip.getBoundingClientRect(); let L=x+14, T=y+14;
+  if(L+r.width>innerWidth-8) L=x-r.width-14; if(T+r.height>innerHeight-8) T=y-r.height-14;
+  tip.style.left=Math.max(8,L)+"px"; tip.style.top=Math.max(8,T)+"px"; }
+function row(parent,color,label,val){ const r=document.createElement("div"); r.className="r"; const s=document.createElement("span");
+  if(color){ const i=document.createElement("i"); i.style.setProperty("--c",color); s.appendChild(i);} s.appendChild(document.createTextNode(label));
+  const b=document.createElement("strong"); b.textContent=val; r.append(s,b); parent.appendChild(r); }
+function head(parent,t){ const d=document.createElement("div"); d.className="d"; d.textContent=t; parent.appendChild(d); }
+const lab = m => MOIS[+m.slice(5)-1]+" "+m.slice(0,4);
+
+/* ---------- petits multiples ---------- */
+const state = {v:"cpi_all", w:"2008", m:"yy"};
+const WINS = {"2008":{a:"2007-01",z:"2010-06",base:"2007",ref:"2008-01"}, "2017":{a:"2015-01",z:"2019-12",base:"2014",ref:"2017-01"}};
+function series(iso,v,src,m,base){
+  const raw=D.series[iso+"|"+v+"|"+src], M=D.months;
+  if(m==="yy") return raw.map((x,i)=> i>=12&&x!=null&&raw[i-12]!=null ? 100*(x/raw[i-12]-1):null);
+  if(m==="mm") return raw.map((x,i)=> i>=1&&x!=null&&raw[i-1]!=null ? 100*(x/raw[i-1]-1):null);
+  let s=0,n=0; M.forEach((d,i)=>{ if(d.slice(0,4)===base&&raw[i]!=null){s+=raw[i];n++;} }); const b=s/n;
+  return raw.map(x=> x==null?null:100*x/b);
+}
+function nice(lo,hi){ const span=hi-lo||1, raw=span/3, p=Math.pow(10,Math.floor(Math.log10(raw))); const st=[1,2,2.5,5,10].map(k=>k*p).find(k=>k>=raw);
+  const a=Math.floor(lo/st)*st, b=Math.ceil(hi/st)*st, t=[]; for(let x=a;x<=b+1e-9;x+=st) t.push(+x.toFixed(6)); return {a,b,t,st}; }
+function draw(){
+  const W=WINS[state.w], M=D.months, i0=M.indexOf(W.a), i1=M.indexOf(W.z), box=document.getElementById("panels");
+  const unit = state.m==="lv" ? "base 100 = moyenne "+W.base : "%";
+  document.getElementById("sm-title").textContent = state.v+" : "+({yy:"glissement annuel",lv:"niveau",mm:"variation mensuelle"})[state.m]+", "+(state.w==="2008"?"2007-2010":"2015-2019")+" ("+unit+")";
+  document.getElementById("ref-label").textContent = "Premier mois de la nouvelle base ("+lab(W.ref)+")";
+  document.getElementById("sm-note").textContent = "Échelle verticale propre à chaque pays. Survoler un graphique pour lire les deux valeurs du mois ; au clavier, flèches gauche et droite."+(state.v==="cpi_food"&&state.w==="2008" ? " Au Bénin, au Burkina Faso et au Mali, les deux courbes se superposent : FAOSTAT reprend la série d'EDEN." : "");
+  box.replaceChildren();
+  D.iso.forEach(iso=>{
+    const e=series(iso,state.v,"eden",state.m,W.base).slice(i0,i1+1), f=series(iso,state.v,"fao",state.m,W.base).slice(i0,i1+1), ms=M.slice(i0,i1+1);
+    const all=e.concat(f).filter(x=>x!=null); let lo=Math.min(...all), hi=Math.max(...all); if(state.m!=="lv"){lo=Math.min(lo,0);hi=Math.max(hi,0);}
+    const N=nice(lo,hi), VW=300, VH=178, ml=34, mr=8, mt=10, mb=20, pw=VW-ml-mr, ph=VH-mt-mb;
+    const X=i=>ml+pw*i/(ms.length-1), Y=v=>mt+ph*(1-(v-N.a)/(N.b-N.a));
+    const p=document.createElement("div"); p.className="panel"; const h=document.createElement("h4"); h.textContent=NAMES[iso]; p.appendChild(h);
+    const svg=el("svg",{viewBox:`0 0 ${VW} ${VH}`,tabindex:0,role:"img","aria-label":NAMES[iso]+", "+state.v+", EDEN et FAOSTAT"},null);
+    N.t.forEach(t=>{ el("line",{x1:ml,x2:VW-mr,y1:Y(t),y2:Y(t),stroke:(t===0&&state.m!=="lv")?"var(--axis)":"var(--rule)","stroke-width":1},svg);
+      const tx=el("text",{x:ml-6,y:Y(t)+3.5,"text-anchor":"end"},svg); tx.textContent=fr(t,N.st<1?1:0); });
+    ms.forEach((d,i)=>{ if(d.slice(5)==="01"){ const tx=el("text",{x:X(i),y:VH-5,"text-anchor":i===0?"start":"middle"},svg); tx.textContent=d.slice(0,4); el("line",{x1:X(i),x2:X(i),y1:mt+ph,y2:mt+ph+3,stroke:"var(--axis)"},svg);} });
+    const ri=ms.indexOf(W.ref); if(ri>=0) el("line",{x1:X(ri),x2:X(ri),y1:mt,y2:mt+ph,stroke:"var(--axis)","stroke-width":2},svg);
+    [[e,"var(--eden)"],[f,"var(--fao)"]].forEach(([s,c])=>{ let d="",pen=false; s.forEach((v,i)=>{ if(v==null){pen=false;return;} d+=(pen?"L":"M")+X(i).toFixed(1)+" "+Y(v).toFixed(1); pen=true; });
+      el("path",{d,fill:"none",stroke:c,"stroke-width":2,"stroke-linejoin":"round","stroke-linecap":"round"},svg); });
+    const cross=el("line",{y1:mt,y2:mt+ph,stroke:"var(--ink-2)","stroke-width":1,visibility:"hidden"},svg);
+    const de=el("circle",{r:4,fill:"var(--eden)",stroke:"var(--surface)","stroke-width":2,visibility:"hidden"},svg), df=el("circle",{r:4,fill:"var(--fao)",stroke:"var(--surface)","stroke-width":2,visibility:"hidden"},svg);
+    let cur=-1;
+    const at=(i,cx,cy)=>{ cur=i; cross.setAttribute("x1",X(i)); cross.setAttribute("x2",X(i)); cross.setAttribute("visibility","visible");
+      [[de,e],[df,f]].forEach(([c,s])=>{ if(s[i]==null){c.setAttribute("visibility","hidden");} else {c.setAttribute("cx",X(i)); c.setAttribute("cy",Y(s[i])); c.setAttribute("visibility","visible");} });
+      const n=state.m==="lv"?1:2;
+      showTip(cx,cy,t=>{ head(t,NAMES[iso]+" · "+lab(ms[i])); row(t,"var(--eden)","EDEN",fr(e[i],n)); row(t,"var(--fao)","FAOSTAT",fr(f[i],n)); if(e[i]!=null&&f[i]!=null) row(t,null,"Écart",fr(e[i]-f[i],n)); }); };
+    const off=()=>{ cross.setAttribute("visibility","hidden"); de.setAttribute("visibility","hidden"); df.setAttribute("visibility","hidden"); tip.hidden=true; };
+    svg.addEventListener("pointermove",ev=>{ const r=svg.getBoundingClientRect(), x=(ev.clientX-r.left)/r.width*VW; const i=Math.max(0,Math.min(ms.length-1,Math.round((x-ml)/pw*(ms.length-1)))); at(i,ev.clientX,ev.clientY); });
+    svg.addEventListener("pointerleave",off); svg.addEventListener("blur",off);
+    svg.addEventListener("focus",()=>{ const r=svg.getBoundingClientRect(); const i=ri>=0?ri:0; at(i,r.left+r.width*X(i)/VW,r.top+20); });
+    svg.addEventListener("keydown",ev=>{ if(ev.key!=="ArrowLeft"&&ev.key!=="ArrowRight") return; ev.preventDefault(); const r=svg.getBoundingClientRect(); const i=Math.max(0,Math.min(ms.length-1,cur+(ev.key==="ArrowRight"?1:-1))); at(i,r.left+r.width*X(i)/VW,r.top+20); });
+    p.appendChild(svg); box.appendChild(p);
+  });
+}
+document.querySelectorAll("#sm .seg").forEach(seg=>seg.addEventListener("click",ev=>{ const b=ev.target.closest("button"); if(!b) return;
+  seg.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",x===b)); state[seg.dataset.k]=b.dataset.v; draw(); }));
+draw();
+
+/* ---------- frise des fenêtres ---------- */
+(function(){
+  const svg=document.getElementById("strip"), rows=[]; D.iso.forEach(i=>["cpi_all","cpi_food"].forEach(v=>rows.push([i,v])));
+  const VW=980, ml=150, mr=14, mt=22, rh=17, gap=9, VH=mt+D.iso.length*(2*rh+gap)+8, y0=2000, y1=2025, pw=VW-ml-mr;
+  svg.setAttribute("viewBox",`0 0 ${VW} ${VH}`); svg.style.minWidth="640px"; svg.style.width="100%";
+  const X=d=>{ const y=+d.slice(0,4), m=+d.slice(5); return ml+pw*((y-y0)+(m-1)/12)/(y1-y0); };
+  for(let y=y0;y<=y1;y+=5){ el("line",{x1:X(y+"-01"),x2:X(y+"-01"),y1:mt-4,y2:VH-6,stroke:"var(--rule)"},svg); const t=el("text",{x:X(y+"-01"),y:12,"text-anchor":"middle"},svg); t.textContent=y; }
+  rows.forEach(([iso,v],k)=>{ const g=Math.floor(k/2), y=mt+g*(2*rh+gap)+(k%2)*rh;
+    if(k%2===0){ const t=el("text",{x:0,y:y+rh+4,style:"font-size:12px;fill:var(--ink);font-weight:600"},svg); t.textContent=NAMES[iso]; }
+    const t2=el("text",{x:ml-8,y:y+rh-5,"text-anchor":"end"},svg); t2.textContent=v;
+    el("line",{x1:ml,x2:VW-mr,y1:y+rh/2,y2:y+rh/2,stroke:"var(--rule)"},svg);
+    D.win.filter(w=>w.iso3===iso&&w.variable===v&&w.mois>=3).forEach(w=>{
+      const c=w.traitement.startsWith("FAOSTAT")?"var(--fao)":w.traitement.startsWith("Exclure")?"var(--neutral)":"var(--eden)";
+      const fin=w.fin>"2024-12"?"2024-12":w.fin, x=X(w.debut), wd=Math.max(4,X(fin)+pw/(12*(y1-y0))-x);
+      const r=el("rect",{x,y:y+3,width:wd,height:rh-6,rx:2,fill:c,stroke:"var(--surface)","stroke-width":2,tabindex:0},svg);
+      const show=(cx,cy)=>showTip(cx,cy,t=>{ head(t,NAMES[iso]+" · "+v); row(t,null,"Fenêtre",w.debut+" à "+w.fin); row(t,null,"Mois",String(w.mois));
+        row(t,null,"1er mois, EDEN",fr(w.mm_eden,1)+" %"); row(t,null,"1er mois, FAOSTAT",fr(w.mm_fao,1)+" %"); row(t,null,"Écart de niveau net",fr(w.net,1)+" pt"); row(t,null,"Traitement",w.traitement.replace(" dans la fenêtre","").replace(/ \(.*/,"")); });
+      r.addEventListener("pointermove",ev=>show(ev.clientX,ev.clientY)); r.addEventListener("pointerleave",()=>tip.hidden=true);
+      r.addEventListener("focus",()=>{ const b=r.getBoundingClientRect(); show(b.left+b.width/2,b.bottom); }); r.addEventListener("blur",()=>tip.hidden=true);
+    });
+  });
+})();
+
+/* ---------- tableaux ---------- */
+(function(){
+  const tb=document.getElementById("jan");
+  D.jan.forEach(j=>{ const tr=document.createElement("tr"); const c=(t,n)=>{ const td=document.createElement("td"); if(n) td.className="n"; td.textContent=t; tr.appendChild(td); };
+    c(NAMES[j.iso3]); c(fr(j.all_eden),1); c(fr(j.all_fao),1); c(fr(j.food_eden),1); c(fr(j.food_fao),1); c(fr(j.nonfood_rt),1); c(j.lecture); tb.appendChild(tr); });
+  const ta=document.getElementById("ann"), YS=[2008,2009,2010,2015,2016,2017];
+  D.iso.forEach(iso=>{ const tr=document.createElement("tr"); const td0=document.createElement("td"); td0.textContent=NAMES[iso]; tr.appendChild(td0);
+    YS.forEach(y=>{ const a=D.ann.find(r=>r.iso3===iso&&r.annee===y), td=document.createElement("td"); td.className="n";
+      td.textContent=fr(a.bceao)+" · "+fr(a.eden)+" · "+fr(a.fao); if(Math.abs(a.eden-a.bceao)>0.5||Math.abs(a.fao-a.bceao)>0.5) td.classList.add("off"); tr.appendChild(td); }); ta.appendChild(tr); });
+})();
+</script>
