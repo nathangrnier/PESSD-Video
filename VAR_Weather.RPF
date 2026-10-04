@@ -1,0 +1,820 @@
+****************************************************************************************
+* Estimation of VARs for cross-country effects global agricultural market shocks
+* VAR model with weather shocks as external instruments
+*
+* Jasmien De Winne and Gert Peersman (Nature Climate Change 2021)
+****************************************************************************************
+
+cal 1960 1 4
+allocate 2017:4
+
+****************************************************************************************
+* Input for estimations
+****************************************************************************************
+
+comp startVAR = 1970:1            ;* sample period
+comp endVAR = 2017:4
+
+comp nlags = 5                    ;* number of lags
+comp nsteps = 17                  ;* number of periods impulse response functions
+
+comp ndraws = 5000                ;* number of draws to construct error bands
+
+comp bupp1 = 840                  ;* inside error bands (will be divided by 1000)
+comp blow1 = 160
+comp bupp2 = 975                  ;* outside error bands
+comp blow2 = 25
+comp bmed  = 500                  ;* median draw
+
+****************************************************************************************
+* Reading datasets + determine variables for panel estimations
+****************************************************************************************
+
+open data Weathershocks.xlsx
+data(for=xlsx,org=obs)
+close data
+
+open data Paneldata_food.xlsx
+data(for=xlsx,org=obs)
+close data
+
+comp start = 1960:1               ;* start of dataset (check with cal above)
+comp end = 2017:4                 ;* end of dataset (chech with all above)
+
+
+* Select countries of ctrylabel below te be included in estimations (=1 in ctrysmpl)
+
+comp nextra = 76                  ;* number of countries in dataset
+comp ntotal = 6                   ;* number of "panel" variables in dataset before variable PROD (first common variable)
+
+dec vect[string] ctrylabel(nextra)
+
+comp ctrylabel = ||'AR','AT','AU','BE','BG','BO','BR','BW','BY','BZ','CA','CH','CL','CN','CO','CR','CY','CZ','DE','DK','EC','EE','EG','ES','FI', $
+                   'FR','GB','GE','GR','GT','HK','HR','HU','ID','IE','IL','IN','IR','IS','IT','JM','JP','KG','KR','LT','LU','LV','MA','MK','MO', $
+                   'MT','MU','MX','MY','NL','NO','NZ','PE','PH','PL','PT','PY','RO','RS','RU','SE','SG','SI','SK','TH','TR','TZ','UA','US','UY','ZA'||
+
+comp ctrysmpl =  ||  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 , $
+                     1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  0 , $
+                     1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ||
+
+* Determine variables for panel estimations
+
+comp nvars = 5                    ;* number of variables in VAR
+
+dec vect[string] varlabel(nvars) extlabel(nextra)
+dec rect[series] VAR(nvars,nextra) SHOCK(nextra,4)
+dec vect[series] PRO(nextra) EXT(nextra)
+
+comp varlabel=||'FCP','EQP','OECD_CLI','USD','GDP'||
+comp figtitle="Weather"
+
+* note: PROD=4/PRODOWN=5/GDP=6/CPI=7/POP=8/ER=9 in loop below
+
+set deflator = cpi
+
+comp npanel=0
+do i=1,nextra
+   if ctrysmpl(1,i)==1
+      {
+      comp npanel = npanel+1
+      comp extlabel(npanel) = ctrylabel(i)
+
+      set VAR(1,npanel) = 100*log(cereals_IMF_SA)-100*log(deflator)       ;* Agricultural price index
+
+      set VAR(2,npanel) = 100*log(wmsci)-100*log(deflator)                ;* Other variables included in baseline VAR
+      set VAR(3,npanel) = 100*log(oecd_cli)
+      set VAR(4,npanel) = 100*log(usdneer)
+
+      set VAR(nvars,npanel) = 100*log((i+6*nextra){0})                    ;* Real GDP of each individual country
+
+      set PRO(npanel) = 100*log((i+5*nextra){0})                          ;* Own food production (to select narrative dummies)
+
+      set EXT(npanel) = 100*log((i+4*nextra){0})                          ;* Harvest volumes in other regions of the world
+
+      set SHOCK(npanel,1) = ((i+0*nextra){0})                             ;* Weather shocks (temp, temp^2, precip, precip^2)
+      set SHOCK(npanel,2) = ((i+1*nextra){0})
+      set SHOCK(npanel,3) = ((i+2*nextra){0})
+      set SHOCK(npanel,4) = ((i+3*nextra){0})
+      }
+end do i
+
+* Grouping of countries
+
+comp ncon = 30                     ;* number of groups
+
+comp conmatrix = %zeros(npanel,ncon)
+dec vect[string] conlabel(ncon)
+
+comp conlabel=||'INCOME H','INCOME L','INCOME H-L','INCOME H','INCOME M','INCOME H-M','INCOME M','INCOME L','INCOME M-L', $
+                'AGRI H','AGRI L','AGRI H-L','AGRI H','AGRI M','AGRI H-M','AGRI M','AGRI L','AGRI M-L', $
+                'TRADE H','TRADE L','TRADE H-L','TRADE H','TRADE M','TRADE H-M','TRADE M','TRADE L','TRADE M-L', $
+                'PRIMNX H','PRIMNX L','PRIMNX H-L'||
+
+comp npanel=0
+do i=1,nextra
+   if ctrysmpl(1,i)==1
+      {
+      comp npanel = npanel+1
+
+      comp conmatrix(npanel,1) = %IF(income(i)<26,1.0,0.0)
+      comp conmatrix(npanel,2) = %IF(income(i)>50,1.0,0.0)
+
+      comp conmatrix(npanel,4) = conmatrix(npanel,1)
+      comp conmatrix(npanel,5) = 1.0-conmatrix(npanel,1)-conmatrix(npanel,2)
+
+      comp conmatrix(npanel,7) = conmatrix(npanel,5)
+      comp conmatrix(npanel,8) = conmatrix(npanel,2)
+
+      comp conmatrix(npanel,10) = %IF(agri(i)<26,1.0,0.0)
+      comp conmatrix(npanel,11) = %IF(agri(i)>50,1.0,0.0)
+
+      comp conmatrix(npanel,13) = conmatrix(npanel,10)
+      comp conmatrix(npanel,14) = 1.0-conmatrix(npanel,10)-conmatrix(npanel,11)
+
+      comp conmatrix(npanel,16) = conmatrix(npanel,14)
+      comp conmatrix(npanel,17) = conmatrix(npanel,11)
+
+      comp conmatrix(npanel,19) = %IF(trade(i)<26,1.0,0.0)
+      comp conmatrix(npanel,20) = %IF(trade(i)>50,1.0,0.0)
+
+      comp conmatrix(npanel,22) = conmatrix(npanel,19)
+      comp conmatrix(npanel,23) = 1.0-conmatrix(npanel,19)-conmatrix(npanel,20)
+
+      comp conmatrix(npanel,25) = conmatrix(npanel,23)
+      comp conmatrix(npanel,26) = conmatrix(npanel,20)
+
+      comp conmatrix(npanel,28) = %IF(foodNX(i)<41,1.0,0.0)
+      comp conmatrix(npanel,29) = %IF(foodNX(i)>40,1.0,0.0)
+
+      }
+end do i
+
+
+* NARRATIVE SHOCKS (dates)
+
+set dumsh start end = 0.0
+
+set dumsh 2012:3 2012:3 = 1.0
+set dumsh 2010:3 2010:3 = 1.0
+set dumsh 2002:3 2002:3 = 1.0
+set dumsh 1995:3 1995:3 = 1.0
+set dumsh 1977:4 1977:4 = 1.0
+set dumsh 1972:3 1972:3 = 1.0
+
+set dumsh 2004:3 2004:3 = -1.0
+set dumsh 1996:3 1996:3 = -1.0
+set dumsh 1988:4 1988:4 = -1.0
+set dumsh 1984:3 1984:3 = -1.0
+set dumsh 1977:3 1977:3 = -1.0
+set dumsh 1975:4 1975:4 = -1.0
+set dumsh 1975:2 1975:2 = -1.0
+
+dec vect[series] PRODUM(npanel) PRO2(npanel)
+dec rect BANDS(2,npanel)
+
+do i=1,npanel
+
+    set PRODUM(i) = dumsh
+
+   set pry = %na
+
+   comp test = PRO(i)(1999:4)
+
+   if %valid(test)
+   {
+
+   set PRO2(i) = PRO(i)-PRO(i){4}
+
+   statistics(fractiles,noprint) PRO2(i) startVAR endVAR
+   comp BANDS(1,i) = %mean + sqrt(%variance)
+   comp BANDS(2,i) = %mean - sqrt(%variance)
+
+   do j=start,end
+      if dumsh(j)==1.and.PRO2(i)(j)<=BANDS(2,i)
+         set PRODUM(i) j j = 0
+      if dumsh(j)==-1.and.PRO2(i)(j)>=BANDS(1,i)
+         set PRODUM(i) j j = 0
+   end do j
+   }
+end do i
+
+****************************************************************************************
+
+set trend = t
+set xtrend = t*t
+set xxtrend = t*t*t
+
+dec rect[series] IRCT1(nsteps*nvars,npanel) IRCON1(nsteps*nvars,ncon)
+dec vect[series] IRMG1(nsteps*nvars)
+dec rect[series] IRMG(5,nvars) IRCT(5,nvars*npanel) IRCON(5,nvars*ncon)
+dec rect[series] resp3(nvars,nvars) resp4(nvars,nvars)
+
+dec vect[series] udraws(nvars) resids(nvars) sresids(nvars) resample(nvars) flip(ndraws) tpoint(15)
+
+****************************************************************************************
+* Estimation of harvest shocks
+****************************************************************************************
+
+set loilp = 100*log(racusd)-100*log(deflator)
+set lcli = 100*log(oecd_cli)
+set leqp = 100*log(wmsci)-100*log(deflator)
+set lcerealp = 100*log(cereals_IMF_SA)-100*log(deflator)
+
+comp lagIV = 6
+
+dec vect[series] PROEXT(npanel)
+
+do i=1,npanel
+
+   linreg(noprint) EXT(i) startVAR endVAR PROEXT(i)
+   # constant trend loilp{1 to lagIV} EXT(i){1 to lagIV} lcerealp{1 to lagIV} lcli{1 to lagIV} leqp{1 to lagIV}
+
+end do i
+
+* Estimation of global harvest shocks
+
+set lprod = 100*log(prod)
+
+linreg(noprint) lprod startVAR endVAR WDproext
+# constant trend loilp{1 to lagIV} lprod{1 to lagIV} lcerealp{1 to lagIV} lcli{1 to lagIV} leqp{1 to lagIV}
+
+
+**************************************************************************************
+* VAR estimations for all countries
+**************************************************************************************
+
+display "          F-STAT       ROBUST F      ADJ RSQUARED     T-STATS =>"
+display "============================================================================================================="
+
+seed 372698
+
+* draws for bootstrapping to account for cross-country correlation
+
+do mm=1,ndraws
+   do nn=startVAR,endVAR
+         comp coin = %raninteger(0,1)
+         set flip(mm) nn nn = %IF(coin==1,1,-1)
+   end do nn
+end do mm
+
+
+do kk=1,npanel
+
+  * Set up the VAR system + estimation
+
+    system(model=varmodel)
+    variables VAR(1,kk) to VAR(nvars,kk)
+    lags 1 to nlags
+    det constant trend
+    end(system)
+
+    smpl(reglist)
+    # constant VAR(1,kk) to VAR(nvars,kk)
+
+    estimate(model=varmodel,noprint)
+    comp cstart=%regstart()
+    comp bstart = %IF(cstart+nlags>=startVAR,cstart+nlags,startVAR)
+    comp bend = %regend()
+
+
+    estimate(model=varmodel,resids=resids,noprint) bstart bend
+
+    comp bpoint = %decomp(%sigma)
+    comp betaols = %modelgetcoeffs(varmodel)
+
+    steps(model=varmodel,noprint,results=fcast2,from=bstart,to=bend)
+    instruments SHOCK(kk,1) SHOCK(kk,2) SHOCK(kk,3) SHOCK(kk,4)
+    do mm=1,nvars
+       linreg(instruments,noprint) fcast2(2,mm) bstart bend
+       # fcast2(2,1)
+       comp bpoint(mm,1) = %beta(1)
+    end do mm
+
+    impulse(noprint,decomp=bpoint,model=varmodel,results=respoint) * nsteps
+
+    do jj=1,nvars
+       do rr=1,nsteps
+          set IRCT1((jj-1)*nsteps+rr,kk) ndraws+1 ndraws+1 = respoint(jj,1)(rr)
+       end do rr
+    end do jj
+
+  * Quality of instruments
+
+    linreg(noprint) fcast2(2,1) bstart bend
+    # SHOCK(kk,1) SHOCK(kk,2) SHOCK(kk,3) SHOCK(kk,4)
+    exclude(all,noprint)
+    set tpoint(1) kk kk = %RBARSQ
+    set tpoint(2) kk kk = %CDSTAT
+    set tpoint(3) kk kk = %SIGNIF
+
+    linreg(noprint,robusterrors) fcast2(2,1) bstart bend
+    # SHOCK(kk,1) SHOCK(kk,2) SHOCK(kk,3) SHOCK(kk,4)
+    exclude(all,noprint)
+    set tpoint(4) kk kk = %CDSTAT
+    set tpoint(5) kk kk = %SIGNIF
+    do mm=1,%NREG
+       set tpoint(5+(mm-1)*2+1) kk kk = %BETA(mm)
+       set tpoint(5+(mm-1)*2+2) kk kk = %TSTATS(mm)
+    end do mm
+
+    disp extlabel(kk) @@>15 tpoint(2)(kk) tpoint(4)(kk)/%NREG tpoint(1)(kk) %TSTATS
+
+    set smplbeg kk kk = bstart
+    set smplend kk kk = bend
+
+  * Bootstrapping
+
+    system(model=bootmodel)
+    variables resample
+    lags 1 to nlags
+    det constant trend
+    end(system)
+
+    do i=1,nvars
+       set resample(i) = %modeldepvars(varmodel)(i){0}
+    end do i
+
+    comp count = 0             ;* counts number of draws
+
+    infobox(action=define,progress,lower=1,upper=ndraws) 'BOOTSTRAPPING'
+    until count==ndraws
+     {
+      comp count = count + 1
+      infobox(current=count)
+
+      comp %modelsetcoeffs(varmodel,betaols)
+
+      do i=1,nvars
+         set udraws(i) = flip(count)*resids(i)
+      end do i
+
+      set BSH1 = flip(count)*SHOCK(kk,1)
+      set BSH2 = flip(count)*SHOCK(kk,2)
+      set BSH3 = flip(count)*SHOCK(kk,3)
+      set BSH4 = flip(count)*SHOCK(kk,4)
+
+      forecast(paths,model=varmodel,results=resample,from=bstart,to=bend)
+      # udraws
+
+      estimate(model=bootmodel,resids=sresids,noprint,outsigma=sigmad) bstart bend
+
+      comp swish = %decomp(sigmad)
+
+      smpl startVAR endVAR
+      steps(model=bootmodel,noprint,results=fcast2,from=bstart,to=bend)
+      instruments BSH1 BSH2 BSH3 BSH4
+      do mm=1,nvars
+         linreg(instruments,noprint) fcast2(2,mm) bstart bend
+         # fcast2(2,1)
+         comp swish(mm,1) = %beta(1)
+      end do mm
+
+      impulse(noprint,decomp=swish,model=bootmodel,results=resp3) * nsteps
+
+      do jj=1,nvars
+         do rr=1,nsteps
+            set IRCT1((jj-1)*nsteps+rr,kk) count count = resp3(jj,1)(rr)
+         end do rr
+      end do jj
+
+    end until
+
+    infobox(action=remove)
+
+end do kk
+
+
+*****************************************************************
+* Show quality of instruments
+*****************************************************************
+
+smpl 1 npanel
+
+spgraph(vfields=1,hfields=1,header=figtitle)
+graph(style=bars,nodates,min=0.0,max=20.0,vgrid=10.0,header="F-statistics") 1
+# tpoint(2)
+spgraph(done)
+
+*****************************************************************
+* Mean Group and calculation of error bands
+*****************************************************************
+
+* Country groups
+
+smpl 1 ndraws+1
+
+comp telcon=%zeros(ncon,1)
+
+do i=1,nsteps*nvars
+   do j=1,ncon
+      set IRCON1(i,j) = 0.0
+   end do j
+end do i
+
+comp h = 0
+
+until h==ncon
+   {
+
+   comp h = h + 1
+
+   do k=1,npanel
+      if conmatrix(k,h)==1.0
+         {
+         comp telcon(h,1) = telcon(h,1) + 1.0
+         do i=1,nsteps
+            do j=1,nvars
+               set IRCON1((j-1)*nsteps+i,h) = IRCON1((j-1)*nsteps+i,h) + IRCT1((j-1)*nsteps+i,k)
+            end do j
+         end do i
+         }
+   end do k
+   do m=1,nsteps*nvars
+      set IRCON1(m,h) = IRCON1(m,h)/telcon(h,1)
+   end do m
+
+   comp h = h + 1
+
+   do k=1,npanel
+      if conmatrix(k,h)==1.0
+         {
+         comp telcon(h,1) = telcon(h,1) + 1.0
+         do i=1,nsteps
+            do j=1,nvars
+               set IRCON1((j-1)*nsteps+i,h) = IRCON1((j-1)*nsteps+i,h) + IRCT1((j-1)*nsteps+i,k)
+            end do j
+         end do i
+         }
+   end do k
+   do m=1,nsteps*nvars
+      set IRCON1(m,h) = IRCON1(m,h)/telcon(h,1)
+   end do m
+
+   comp h = h + 1
+
+   do m=1,nsteps*nvars
+      set IRCON1(m,h) = IRCON1(m,h-2) - IRCON1(m,h-1)
+   end do m
+
+   }
+end until
+
+* overall mean group
+
+smpl 1 ndraws+1
+
+do i=1,nsteps
+   do j=1,nvars
+      set IRMG1((j-1)*nsteps+i) = IRCT1((j-1)*nsteps+i,1)/npanel
+      do k=2,npanel
+         set IRMG1((j-1)*nsteps+i) = IRMG1((j-1)*nsteps+i) + IRCT1((j-1)*nsteps+i,k)/npanel
+      end do k
+   end do j
+end do i
+
+*****************************************************************
+
+* Construction of error bands
+
+smpl 1 ndraws
+
+do h=1,ncon
+   do i=1,nsteps
+      do j=1,nvars
+         order IRCON1((j-1)*nsteps+i,h) 1 ndraws
+         set IRCON(1,(h-1)*(nvars)+j) i i = IRCON1((j-1)*nsteps+i,h)(ndraws*bmed/1000)
+         set IRCON(2,(h-1)*(nvars)+j) i i = IRCON1((j-1)*nsteps+i,h)(ndraws*bupp1/1000)
+         set IRCON(3,(h-1)*(nvars)+j) i i = IRCON1((j-1)*nsteps+i,h)(ndraws*blow1/1000)
+         set IRCON(4,(h-1)*(nvars)+j) i i = IRCON1((j-1)*nsteps+i,h)(ndraws*bupp2/1000)
+         set IRCON(5,(h-1)*(nvars)+j) i i = IRCON1((j-1)*nsteps+i,h)(ndraws*blow2/1000)
+      end do j
+   end do i
+end do k
+
+do i=1,nsteps
+   do j=1,nvars
+      order IRMG1((j-1)*nsteps+i) 1 ndraws
+      set IRMG(1,j) i i = IRMG1((j-1)*nsteps+i)(ndraws*bmed/1000)
+      set IRMG(2,j) i i = IRMG1((j-1)*nsteps+i)(ndraws*bupp1/1000)
+      set IRMG(3,j) i i = IRMG1((j-1)*nsteps+i)(ndraws*blow1/1000)
+      set IRMG(4,j) i i = IRMG1((j-1)*nsteps+i)(ndraws*bupp2/1000)
+      set IRMG(5,j) i i = IRMG1((j-1)*nsteps+i)(ndraws*blow2/1000)
+   end do j
+end do i
+
+do k=1,npanel
+   do i=1,nsteps
+      do j=1,nvars
+         order IRCT1((j-1)*nsteps+i,k) 1 ndraws
+         set IRCT(1,(k-1)*(nvars)+j) i i = IRCT1((j-1)*nsteps+i,k)(ndraws*bmed/1000)
+         set IRCT(2,(k-1)*(nvars)+j) i i = IRCT1((j-1)*nsteps+i,k)(ndraws*bupp1/1000)
+         set IRCT(3,(k-1)*(nvars)+j) i i = IRCT1((j-1)*nsteps+i,k)(ndraws*blow1/1000)
+         set IRCT(4,(k-1)*(nvars)+j) i i = IRCT1((j-1)*nsteps+i,k)(ndraws*bupp2/1000)
+         set IRCT(5,(k-1)*(nvars)+j) i i = IRCT1((j-1)*nsteps+i,k)(ndraws*blow2/1000)
+      end do j
+   end do i
+end do k
+
+
+*****************************************************************
+* Figures
+*****************************************************************
+
+smpl 1 nsteps
+
+* Full figures for panel
+
+smpl 1 nsteps
+spgraph(vfields=2,hfields=3,header=figtitle)
+   do k=1,nvars
+      graph(overlay=fan,ovsamescale,ovcount=2,number=0,header=varlabel(k)) 5
+      # IRMG(1,k) / 2
+      # IRMG(2,k) / 1
+      # IRMG(3,k) / 1
+      # IRMG(4,k) / 8
+      # IRMG(5,k) / 8
+   end do k
+spgraph(done)
+
+*****************************************************************
+
+
+* Show countries
+
+do k=nvars,nvars
+
+   comp min=max=0.0
+   do j=1,npanel
+      table(noprint) / IRCT(1,(j-1)*(nvars)+k) to IRCT(5,(j-1)*(nvars)+k)
+      comp m1 = %minimum
+      comp m2 = %maximum
+      if m1<=min
+         comp min=m1
+      if m2>=max
+         comp max=m2
+   end do j
+
+   spgraph(vfields=3,hfields=7,header=figtitle)
+   do j=1,21
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=extlabel(j)) 5
+      # IRCT(1,(j-1)*(nvars)+k) / 2
+      # IRCT(4,(j-1)*(nvars)+k) / 8
+      # IRCT(2,(j-1)*(nvars)+k) / 8
+      # IRCT(3,(j-1)*(nvars)+k) / 2
+      # IRCT(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+   spgraph(vfields=3,hfields=7,header=figtitle)
+   do j=22,42
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=extlabel(j)) 5
+      # IRCT(1,(j-1)*(nvars)+k) / 2
+      # IRCT(4,(j-1)*(nvars)+k) / 8
+      # IRCT(2,(j-1)*(nvars)+k) / 8
+      # IRCT(3,(j-1)*(nvars)+k) / 2
+      # IRCT(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+   spgraph(vfields=3,hfields=7,header=figtitle)
+   do j=43,63
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=extlabel(j)) 5
+      # IRCT(1,(j-1)*(nvars)+k) / 2
+      # IRCT(4,(j-1)*(nvars)+k) / 8
+      # IRCT(2,(j-1)*(nvars)+k) / 8
+      # IRCT(3,(j-1)*(nvars)+k) / 2
+      # IRCT(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+   spgraph(vfields=3,hfields=7,header=figtitle)
+   do j=64,npanel
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=extlabel(j)) 5
+      # IRCT(1,(j-1)*(nvars)+k) / 2
+      # IRCT(4,(j-1)*(nvars)+k) / 8
+      # IRCT(2,(j-1)*(nvars)+k) / 8
+      # IRCT(3,(j-1)*(nvars)+k) / 2
+      # IRCT(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+end do k
+
+*****************************************************************
+
+* Show groups
+
+do k=nvars,nvars
+
+   comp min=max=0.0
+   do j=1,ncon
+      table(noprint) / IRCON(1,(j-1)*(nvars)+k) to IRCON(5,(j-1)*(nvars)+k)
+      comp m1 = %minimum
+      comp m2 = %maximum
+      if m1<=min
+         comp min=m1
+      if m2>=max
+         comp max=m2
+   end do j
+
+   spgraph(vfields=3,hfields=3,header=figtitle)
+   do j=3,3
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=6,6
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=9,9
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=12,12
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=15,15
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=18,18
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=21,21
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=24,24
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=27,27
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+   spgraph(vfields=1,hfields=3,header=figtitle)
+   do j=28,28
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=29,29
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=30,30
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+   spgraph(vfields=1,hfields=3,header=figtitle)
+   do j=19,19
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=23,23
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=20,20
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+   spgraph(vfields=1,hfields=3,header=figtitle)
+   do j=10,10
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=14,14
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=11,11
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+   spgraph(vfields=1,hfields=3,header=figtitle)
+   do j=1,1
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=5,5
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   do j=2,2
+      graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=4,number=0,header=conlabel(j)) 5
+      # IRCON(1,(j-1)*(nvars)+k) / 2
+      # IRCON(4,(j-1)*(nvars)+k) / 8
+      # IRCON(2,(j-1)*(nvars)+k) / 8
+      # IRCON(3,(j-1)*(nvars)+k) / 2
+      # IRCON(5,(j-1)*(nvars)+k) / 2
+   end do j
+   spgraph(done)
+
+end do k
+
+*****************************************************************
+
+* Show panel results
+
+smpl 1 nsteps
+spgraph(vfields=1,hfields=3,header=figtitle,subheader="PANEL RESULTS")
+   do k=nvars,nvars
+      graph(overlay=fan,ovsamescale,ovcount=4,number=0) 5
+      # IRMG(1,k) / 2
+      # IRMG(4,k) / 8
+      # IRMG(2,k) / 8
+      # IRMG(3,k) / 2
+      # IRMG(5,k) / 2
+   end do k
+spgraph(done)
+
