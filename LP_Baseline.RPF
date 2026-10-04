@@ -1,0 +1,1028 @@
+****************************************************************************************
+* Estimation of local projections for cross-country effects agricultural market shocks
+*
+* Jasmien De Winne and Gert Peersman
+****************************************************************************************
+
+cal 1960 1 4
+allocate 2016:4
+
+****************************************************************************************
+* Input for estimations
+****************************************************************************************
+
+comp lagLP = 5                    ;* number of lags control and dependent variables LP estimations
+comp nsteps = 17                  ;* number of periods impulse response functions LP estimations
+
+comp startLP = 1970:1             ;* start sample LP estimations
+comp endLP = 2017:4               ;* end sample LP estimations
+
+comp per1 = 1.00                  ;* inside error bands (multiplied by standard deviation)
+comp per2 = 1.96                  ;* outside error bands (multiplied by standard deviation)
+
+****************************************************************************************
+* Reading dataset + determine variables for panel estimations
+****************************************************************************************
+
+open data Weathershocks.xlsx
+data(for=xlsx,org=obs)
+close data
+
+open data Paneldata_food.xlsx
+data(for=xlsx,org=obs)
+close data
+
+comp start = 1960:1               ;* start of dataset (check with cal above)
+comp end = 2016:4                 ;* end of dataset (chech with all above)
+
+
+* Select countries of ctrylabel below te be included in estimations (=1 in ctrysmpl)
+
+comp nextra = 76                  ;* number of countries in dataset
+comp ntotal = 6                   ;* number of "panel" variables in dataset before variable PROD (first common variable)
+
+dec vect[string] ctrylabel(nextra)
+
+comp ctrylabel = ||'AR','AT','AU','BE','BG','BO','BR','BW','BY','BZ','CA','CH','CL','CN','CO','CR','CY','CZ','DE','DK','EC','EE','EG','ES','FI', $
+                   'FR','GB','GE','GR','GT','HK','HR','HU','ID','IE','IL','IN','IR','IS','IT','JM','JP','KG','KR','LT','LU','LV','MA','MK','MO', $
+                   'MT','MU','MX','MY','NL','NO','NZ','PE','PH','PL','PT','PY','RO','RS','RU','SE','SG','SI','SK','TH','TR','TZ','UA','US','UY','ZA'||
+
+comp ctrysmpl =  ||  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 , $
+                     1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  0 , $
+                     1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ,  1 ||
+
+* Determine variables for panel estimations
+
+comp nctr = 4                     ;* number of control variables for LP estimations
+comp ncon = 5                     ;* number of interaction variables (=1 if constant)
+
+dec vect[string] extlabel(nextra) varlabel(1) conlabel(ncon)
+dec rect[series] CTR(nextra,nctr) CON1(nextra,ncon) CON2(nextra,2) CON3(nextra,2) CON4(nextra,2) CON5(nextra,2) SHOCK(nextra,4)
+dec vect[series] PRO(nextra) OWN(nextra) FCP(nextra) DFCP(nextra) GLOFCP(nextra) GDP(nextra) EXT(nextra)
+
+comp varlabel=||'GDP'||
+comp conlabel=||'CT','INCOME','FOODNX','AGRI','TRADE'||
+
+
+* note: PROD=4/PRODOWN=5/GDP=6/CPI=7/POP=8/ER=9 in loop below
+
+set deflator = cpi
+
+comp npanel=0
+do i=1,nextra
+   if ctrysmpl(1,i)==1
+      {
+      comp npanel = npanel+1
+      comp extlabel(npanel) = ctrylabel(i)
+
+      set FCP(npanel) = 100*log(cereals_IMF_SA)-100*log(deflator)             ;* global agricultural market variables
+
+      set GDP(npanel) = 100*log((i+6*nextra){0})
+
+      set CTR(npanel,1) = 100*log(usdneer)                                    ;* Control variables
+      set CTR(npanel,2) = 100*log(wmsci)-100*log(deflator)
+      set CTR(npanel,3) = 100*log(OECD_CLI)
+      set CTR(npanel,4) = t
+
+      set OWN(npanel) = 100*log((i+5*nextra){0})                              ;* Own food production (to select narrative dummies)
+
+      set EXT(npanel) = 100*log((i+4*nextra){0})                              ;* Ext production (foreign harvests)
+
+      set SHOCK(npanel,1) = ((i+0*nextra){0})                                 ;* Weather shocks (temp, temp^2, precip, precip^2)
+      set SHOCK(npanel,2) = ((i+1*nextra){0})
+      set SHOCK(npanel,3) = ((i+2*nextra){0})
+      set SHOCK(npanel,4) = ((i+3*nextra){0})
+      }
+end do i
+
+* Group (interaction) dummies included in the estimations
+* put equal to 1.0 if only a constant is used
+
+comp npanel=0
+do i=1,nextra
+   if ctrysmpl(1,i)==1
+      {
+      comp npanel = npanel+1
+      set CON1(npanel,1) = 1.0
+      set CON1(npanel,2) = income2(i)
+      set CON1(npanel,3) = foodNX2(i)
+      set CON1(npanel,4) = agri2(i)
+      set CON1(npanel,5) = trade2(i)
+      set CON2(npanel,1) = 1.0
+      set CON2(npanel,2) = income2(i)
+      set CON3(npanel,1) = 1.0
+      set CON3(npanel,2) = foodNX2(i)
+      set CON4(npanel,1) = 1.0
+      set CON4(npanel,2) = agri2(i)
+      set CON5(npanel,1) = 1.0
+      set CON5(npanel,2) = trade2(i)
+
+      }
+end do i
+
+****************************************************************************************
+
+smpl start end
+set trend = t
+set xtrend = t*t
+set xxtrend = t*t*t
+
+****************************************************************************************
+
+dec vect[series] PCTR(nctr) PCON1(ncon) PCON2(2) PCON3(2) PCON4(2) PCON5(2) LPSMPL(npanel) PSHOCK(4)
+
+pform PFCP start end
+# FCP(1) to FCP(npanel)
+
+*pform PPRO start end
+*# PRO(1) to PRO(npanel)
+
+pform PEXT start end
+# EXT(1) to EXT(npanel)
+
+pform PGDP start end
+# GDP(1) to GDP(npanel)
+
+do k=1,nctr
+   pform PCTR(k) start end
+   # CTR(1,k) to CTR(npanel,k)
+end do k
+
+do k=1,ncon
+   pform PCON1(k) start end
+   # CON1(1,k) to CON1(npanel,k)
+end do k
+
+do k=1,2
+   pform PCON2(k) start end
+   # CON2(1,k) to CON2(npanel,k)
+   pform PCON3(k) start end
+   # CON3(1,k) to CON3(npanel,k)
+   pform PCON4(k) start end
+   # CON4(1,k) to CON4(npanel,k)
+   pform PCON5(k) start end
+   # CON5(1,k) to CON5(npanel,k)
+end do k
+
+do i=1,npanel
+    set LPSMPL(i) startLP endLP = 1.0
+end do i
+
+pform PLPSMPL start end
+# LPSMPL(1) to LPSMPL(npanel)
+
+do k=1,4
+   pform PSHOCK(k) start end
+   # SHOCK(1,k) to SHOCK(npanel,k)
+end do k
+
+* Checking correct reading of data
+
+comp testdata = %l((ntotal+4)*nextra+1)
+if testdata == 'PROD'
+   display "Dataset succesfully transformed"
+else
+   display "PLEASE CHECK: There is a problem with reading data!!!"
+endif
+display " "
+
+****************************************************************************************
+* Estimation/construction food commodity market shocks
+****************************************************************************************
+
+* NARRATIVE SHOCKS
+
+smpl start end
+
+set dumsh start end = 0.0
+
+set dumsh 2012:3 2012:3 = 1.0
+set dumsh 2010:3 2010:3 = 1.0
+set dumsh 2002:3 2002:3 = 1.0
+set dumsh 1995:3 1995:3 = 1.0
+set dumsh 1977:4 1977:4 = 1.0
+set dumsh 1972:3 1972:3 = 1.0
+
+set dumsh 2004:3 2004:3 = -1.0
+set dumsh 1996:3 1996:3 = -1.0
+set dumsh 1988:4 1988:4 = -1.0
+set dumsh 1984:3 1984:3 = -1.0
+set dumsh 1977:3 1977:3 = -1.0
+set dumsh 1975:4 1975:4 = -1.0
+set dumsh 1975:2 1975:2 = -1.0
+
+dec vect[series] PRODUM(npanel) OWN2(npanel)
+dec rect BANDS(2,npanel)
+
+do i=1,npanel
+
+   set PRODUM(i) = dumsh
+   set pry = %na
+
+   comp test = OWN(i)(1999:4)
+
+   if %valid(test)
+   {
+
+   set OWN2(i) = OWN(i)-OWN(i){4}
+
+   statistics(fractiles,noprint) OWN2(i) startLP endLP
+   comp BANDS(1,i) = %mean + sqrt(%variance)
+   comp BANDS(2,i) = %mean - sqrt(%variance)
+
+   do j=start,end
+      if dumsh(j)==1.and.OWN2(i)(j)<=BANDS(2,i)
+         set PRODUM(i) j j = 0
+      if dumsh(j)==-1.and.OWN2(i)(j)>=BANDS(1,i)
+         set PRODUM(i) j j = 0
+   end do j
+   }
+   else
+   {
+   set PRODUM(i) = 0.0
+   }
+end do i
+
+****************************************************************************************
+* Estimation food commodity shocks
+****************************************************************************************
+
+* Narrative shocks for individual countries
+
+dec vect[series] ctsh2(npanel)
+
+smpl start end
+
+do i=1,npanel
+
+   set ctsh2(i) = PRODUM(i)
+
+end do i
+
+pform PDUMSH start end
+# ctsh2(1) to ctsh2(npanel)
+
+
+* External shocks for individual countries
+
+set loilp = 100*log(racusd)-100*log(deflator)
+set lcli = 100*log(oecd_cli)
+set leqp = 100*log(wmsci)-100*log(deflator)
+set lcerealp = 100*log(cereals_IMF_SA)-100*log(deflator)
+
+comp lagIV = 6
+
+dec vect[series] ctsh(npanel)
+
+smpl start end
+
+do i=1,npanel
+
+   linreg(noprint) EXT(i) startLP endLP ctsh(i)
+   # constant trend EXT(i){1 to lagIV} lcerealp{1 to lagIV} loilp{1 to lagIV} lcli{1 to lagIV} leqp{1 to lagIV}
+
+   statistics(noprint) ctsh(i)
+   set ctsh(i) = ctsh(i)/sqrt(%variance)
+
+end do i
+
+pform PEXTSH start end
+# ctsh(1) to ctsh(npanel)
+
+
+****************************************************************************************
+* PANEL ESTIMATIONS
+****************************************************************************************
+
+dec rect[series] IRPMG(6,1)
+dec vect[series] PCON1CTSH(ncon) PCON1FCT_SH(ncon) PCON1FCPCT(ncon)
+dec vect[series] PCON2CTSH(2) PCON2FCT_SH(2) PCON2FCPCT(2)
+dec vect[series] PCON3CTSH(2) PCON3FCT_SH(2) PCON3FCPCT(2)
+dec vect[series] PCON4CTSH(2) PCON4FCT_SH(2) PCON4FCPCT(2)
+dec vect[series] PCON5CTSH(2) PCON5FCT_SH(2) PCON5FCPCT(2)
+dec vect[series] sweeps(1) RESFCPCT(1) FCT_SH(1)
+dec vect[series] Uit St
+dec vect[real] stdvpdep(ncon)
+
+
+comp tobs=end-start+1
+
+calendar(panelobs=tobs) 1960 1 4
+allocate npanel//end
+
+
+*******************************************************
+
+* FIRST STAGE: calculate impact of instruments (shocks) on agricultural commodity prices
+* A) Regres food commodity prices on control variables to obtain reduced form residuals
+* B) Regres reduced form residuals on instruments (shocks) and calculate in-sample forecasts
+
+smpl 1//start npanel//end
+
+sweep(smpl=PLPSMPL,group=%indiv(t),variance=hetero,series=RESFCPCT)
+# PFCP
+# constant PFCP{1 to lagLP} PCTR(1){1 to lagLP} PCTR(2){1 to lagLP} PCTR(3){1 to lagLP} PCTR(4)
+
+sweep(smpl=PLPSMPL,group=%indiv(t),variance=hetero,series=FCT_SH,prj=fitted)
+# RESFCPCT(1)
+# PDUMSH PEXTSH
+
+* Check quality of instruments
+
+linreg(create,smpl=PLPSMPL,noprint,coeffs=%beta,covmat=%XX,form=chisquared) RESFCPCT(1) / residsIV
+# PDUMSH PEXTSH
+
+exclude(all,noprint)
+
+comp Hinv = %XX/%seesq
+comp Xlist = %reglist()
+comp nXs = %nreg
+dim Uit(nXs) St(nXs)
+
+do i=1,nXs
+   set Uit(i) = xlist(i){0}*residsIV
+   panel(tsum=1.0) Uit(i) / St(i)
+end do i
+
+mcov(center,cluster=%indiv(T),noprint,smpl=PLPSMPL)
+# Uit(1) to Uit(nXs)
+comp Vctry = Hinv*%CMOM*Hinv
+
+mcov(center,noprint,lwindow=neweywest,lags=0) startLP endLP
+# St(1) to St(nXs)
+comp Vtime0 = Hinv*%CMOM*Hinv
+
+mcov(center,noprint,lwindow=neweywest,lags=0,smpl=PLPSMPL)
+# Uit(1) to Uit(nXs)
+comp Vwhite0 = Hinv*%CMOM*Hinv
+
+comp Vsim = Vctry+Vtime0-Vwhite0
+
+linreg(print,create,coeffs=%beta,covmat=Vsim,form=chisquared,smpl=PLPSMPL) RESFCPCT(1)
+# xlist
+
+exclude(all,print)
+
+
+*******************************************************
+
+* SECOND STAGE: estimate local projections for all horizons
+* Pooled Mean Group estimator
+* Adjust degrees of freedom in second step
+
+infobox(action=define,progress,lower=1,upper=nsteps) 'PANEL ESTIMATIONS - BENCHMARK'
+
+smpl 1//start npanel//end
+
+comp ppp = 0
+
+do j=1,nsteps
+
+   smpl 1//start npanel//end
+   clear sweeps(1)
+   clear resids1
+   clear resids2
+
+   set VARb = PGDP{-j+1}-PGDP{1}
+
+   * Sweep short-run dynamics control variables (slope heterogeneity PMG)
+
+   sweep(group=%indiv(t),variance=hetero,series=sweeps,smpl=PLPSMPL)
+   # VARb
+   # constant PFCP{1 to lagLP} PGDP{1 to lagLP} PCTR(1){1 to lagLP} PCTR(2){1 to lagLP} PCTR(3){1 to lagLP} PCTR(4)
+
+   comp NoSW = %nreg
+
+   *******************************************************
+
+   * Pooled Mean Group estimation (+ correction for 2SLS and clustered standard errors)
+   * 1) Estimate second stage based on first stage forecasts
+   * 2) Recalculate residuals taking into account first stage errors (= simple 2SLS)
+   * 3) Cluster standard errors
+
+   linreg(smpl=PLPSMPL,noprint,dfc=NoSW) sweeps(1) / resids1
+   # FCT_SH
+
+   comp Hinv = %XX
+   comp Xlist = %reglist()
+   comp nXs = %nreg
+   dim Uit(nXs) St(nXs)
+
+   linreg(create,smpl=PLPSMPL,noprint) sweeps(1) / resids2
+   # RESFCPCT(1)
+
+   do i=1,nXs
+      set Uit(i) = xlist(i){0}*resids2
+      panel(tsum=1.0) Uit(i) / St(i)
+   end do i
+
+   mcov(center,noprint,lwindow=neweywest,lags=j+1) startLP endLP
+   # St(1) to St(nXs)
+   comp VtimeL = Hinv*%CMOM*Hinv
+
+   linreg(noprint,create,coeffs=%beta,covmat=VtimeL,form=chisquared,smpl=PLPSMPL) sweeps(1)
+   # xlist
+
+   set IRPMG(1,1) j j = %beta(1)
+   set IRPMG(2,1) j j = %beta(1) + per1*%stderrs(1)
+   set IRPMG(3,1) j j = %beta(1) - per1*%stderrs(1)
+   set IRPMG(4,1) j j = %beta(1) + per2*%stderrs(1)
+   set IRPMG(5,1) j j = %beta(1) - per2*%stderrs(1)
+   set IRPMG(6,1) j j = %nobs
+
+   panel(group=%indiv(t),icount=1.0,compress) %resids / bcount
+
+   comp ppp = ppp+1
+   infobox(current=ppp)
+
+end do j
+infobox(action=remove)
+
+
+****************************************************************************************
+* Showing results
+****************************************************************************************
+
+
+smpl 1 nsteps
+
+spgraph(vfields=1,hfields=3,header="Impact of food commodity market shocks on GDP")
+do i=1,1
+   graph(overlay=fan,ovsamescale,ovcount=2,number=0,header="Pooled Mean Group Estimator") 5
+   # IRPMG(1,i) / 4
+   # IRPMG(2,i) / 1
+   # IRPMG(3,i) / 1
+   # IRPMG(4,i) / 8
+   # IRPMG(5,i) / 8
+end do i
+spgraph(done)
+
+extremum(noprint) bcount 1 npanel
+comp nobs = IRPMG(6,1)(nsteps)
+display " "
+display "MINIMUM and MAXIMUM number of observations + country label BENCHMARK"
+display " "
+display %minimum extlabel(%minent)
+display %maximum extlabel(%maxent)
+display "PARAMETERS:" NoSW
+display "TOTAL OBS: " nobs
+
+
+****************************************************************************************
+* Estimation with all interaction variables
+****************************************************************************************
+
+dec rect[series] IRCON1(6*(ncon),1)
+
+* Generate interaction variables
+
+smpl 1//start npanel//end
+
+do i=2,ncon
+   statistics(noprint) PCON1(i)
+   comp stdvpdep(i) = sqrt(%variance)
+   set PCON1(i) = (PCON1(i)-%mean)/stdvpdep(i)
+end do i
+
+do i=1,ncon
+   set PCON1FCT_SH(i) = PCON1(i)*FCT_SH(1)
+   set PCON1FCPCT(i) = PCON1(i)*RESFCPCT(1)
+end do i
+
+
+*******************************************************
+
+infobox(action=define,progress,lower=1,upper=nsteps) 'PANEL ESTIMATIONS - joint estimations'
+
+smpl 1//start npanel//end
+
+comp ppp = 0
+
+do j=1,nsteps
+
+   smpl 1//start npanel//end
+   clear sweeps(1)
+   clear resids1
+   clear resids2
+
+   set VARb = PGDP{-j+1}-PGDP{1}
+
+   * Sweep short-run dynamics of control variables (slope heterogeneity)
+
+   sweep(group=%indiv(t),variance=hetero,series=sweeps,smpl=PLPSMPL)
+   # VARb
+   # constant PFCP{1 to lagLP} PGDP{1 to lagLP} PCTR(1){1 to lagLP} PCTR(2){1 to lagLP} PCTR(3){1 to lagLP} PCTR(4)
+
+   comp NoSW = %nreg
+
+   *******************************************************
+
+   * Pooled Mean Group estimation (+ correction for 2SLS and clustered standard errors)
+   * 1) Estimate second stage based on first stage forecasts
+   * 2) Recalculate residuals taking into account first stage errors (= simple 2SLS)
+   * 3) Cluster standard errors
+
+
+   linreg(smpl=PLPSMPL,noprint,dfc=NoSW) sweeps(1) / resids1
+   # PCON1FCT_SH PCON1
+
+   comp Hinv = %XX
+   comp Xlist = %reglist()
+   comp nXs = %nreg
+   dim Uit(nXs) St(nXs)
+
+   linreg(create,smpl=PLPSMPL,noprint) sweeps(1) / resids2
+   # PCON1FCPCT PCON1
+
+   do i=1,nXs
+      set Uit(i) = xlist(i){0}*resids2
+      panel(tsum=1.0) Uit(i) / St(i)
+   end do i
+
+   mcov(center,noprint,lwindow=neweywest,lags=j+1) startLP endLP
+   # St(1) to St(nXs)
+   comp VtimeL = Hinv*%CMOM*Hinv
+
+   linreg(noprint,create,coeffs=%beta,covmat=VtimeL,form=chisquared,smpl=PLPSMPL) sweeps(1)
+   # xlist
+
+   do k=1,ncon
+      set IRCON1((k-1)*6+1,1) j j = %beta(k)
+      set IRCON1((k-1)*6+2,1) j j = %beta(k) + per1*%stderrs(k)
+      set IRCON1((k-1)*6+3,1) j j = %beta(k) - per1*%stderrs(k)
+      set IRCON1((k-1)*6+4,1) j j = %beta(k) + per2*%stderrs(k)
+      set IRCON1((k-1)*6+5,1) j j = %beta(k) - per2*%stderrs(k)
+      set IRCON1((k-1)*6+6,1) j j = %nobs
+   end do k
+
+   panel(group=%indiv(t),icount=1.0,compress) %resids / bcount
+
+
+   comp ppp = ppp+1
+   infobox(current=ppp)
+
+end do j
+infobox(action=remove)
+
+****************************************************************************************
+
+smpl 1 nsteps
+
+comp min=max=0.0
+do k=1,ncon
+   do i=1,1
+      table(noprint) / IRCON1((k-1)*6+1,i) to IRCON1((k-1)*6+5,i)
+   comp m1 = %minimum
+   comp m2 = %maximum
+   if m1<=min
+      comp min=m1
+   if m2>=max
+      comp max=m2
+   end do i
+end do k
+
+spgraph(vfields=2,hfields=4,header="Impact of interaction on GDP - joint estimation")
+do k=1,ncon
+   graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=2,number=0,header=conlabel(k)) 5
+   # IRCON1((k-1)*6+1,1) / 4
+   # IRCON1((k-1)*6+2,1) / 1
+   # IRCON1((k-1)*6+3,1) / 1
+   # IRCON1((k-1)*6+4,1) / 8
+   # IRCON1((k-1)*6+5,1) / 8
+end do k
+spgraph(done)
+
+
+****************************************************************************************
+* Estimation with interactions variables - separately
+****************************************************************************************
+
+comp ncon = 2
+
+*******************************************************
+
+dec rect[series] IRCON2(6*(ncon),1)
+
+* Generate interaction variables
+
+smpl 1//start npanel//end
+
+do i=2,ncon
+   statistics(noprint) PCON2(i)
+   comp stdvpdep(i) = sqrt(%variance)
+   set PCON2(i) = (PCON2(i)-%mean)/stdvpdep(i)
+end do i
+
+do i=1,ncon
+   set PCON2FCT_SH(i) = PCON2(i)*FCT_SH(1)
+   set PCON2FCPCT(i) = PCON2(i)*RESFCPCT(1)
+end do i
+
+
+*******************************************************
+
+infobox(action=define,progress,lower=1,upper=nsteps) 'PANEL ESTIMATIONS - INTERACTIONS'
+
+smpl 1//start npanel//end
+
+comp ppp = 0
+
+do j=1,nsteps
+
+   smpl 1//start npanel//end
+   clear sweeps(1)
+   clear resids1
+   clear resids2
+
+   set VARb = PGDP{-j+1}-PGDP{1}
+
+   * Sweep short-run dynamics of control variables (slope heterogeneity)
+
+   sweep(group=%indiv(t),variance=hetero,series=sweeps,smpl=PLPSMPL)
+   # VARb
+   # constant PFCP{1 to lagLP} PGDP{1 to lagLP} PCTR(1){1 to lagLP} PCTR(2){1 to lagLP} PCTR(3){1 to lagLP} PCTR(4)
+
+   comp NoSW = %nreg
+
+   *******************************************************
+
+   * Pooled Mean Group estimation (+ correction for 2SLS and clustered standard errors)
+   * 1) Estimate second stage based on first stage forecasts
+   * 2) Recalculate residuals taking into account first stage errors (= simple 2SLS)
+   * 3) Cluster standard errors
+
+
+   linreg(smpl=PLPSMPL,noprint,dfc=NoSW) sweeps(1) / resids1
+   # PCON2FCT_SH PCON2
+
+   comp Hinv = %XX
+   comp Xlist = %reglist()
+   comp nXs = %nreg
+   dim Uit(nXs) St(nXs)
+
+   linreg(create,smpl=PLPSMPL,noprint) sweeps(1) / resids2
+   # PCON2FCPCT PCON2
+
+   do i=1,nXs
+      set Uit(i) = xlist(i){0}*resids2
+      panel(tsum=1.0) Uit(i) / St(i)
+   end do i
+
+   mcov(center,noprint,lwindow=neweywest,lags=j+1) startLP endLP
+   # St(1) to St(nXs)
+   comp VtimeL = Hinv*%CMOM*Hinv
+
+   linreg(noprint,create,coeffs=%beta,covmat=VtimeL,form=chisquared,smpl=PLPSMPL) sweeps(1)
+   # xlist
+
+   do k=1,ncon
+      set IRCON2((k-1)*6+1,1) j j = %beta(k)
+      set IRCON2((k-1)*6+2,1) j j = %beta(k) + per1*%stderrs(k)
+      set IRCON2((k-1)*6+3,1) j j = %beta(k) - per1*%stderrs(k)
+      set IRCON2((k-1)*6+4,1) j j = %beta(k) + per2*%stderrs(k)
+      set IRCON2((k-1)*6+5,1) j j = %beta(k) - per2*%stderrs(k)
+      set IRCON2((k-1)*6+6,1) j j = %nobs
+   end do k
+
+   panel(group=%indiv(t),icount=1.0,compress) %resids / bcount
+
+
+   comp ppp = ppp+1
+   infobox(current=ppp)
+
+end do j
+infobox(action=remove)
+
+****************************************************************************************
+****************************************************************************************
+
+dec rect[series] IRCON3(6*(ncon),1)
+
+* Generate interaction variables
+
+smpl 1//start npanel//end
+
+do i=2,ncon
+   statistics(noprint) PCON3(i)
+   comp stdvpdep(i) = sqrt(%variance)
+   set PCON3(i) = (PCON3(i)-%mean)/stdvpdep(i)
+end do i
+
+do i=1,ncon
+   set PCON3FCT_SH(i) = PCON3(i)*FCT_SH(1)
+   set PCON3FCPCT(i) = PCON3(i)*RESFCPCT(1)
+end do i
+
+
+*******************************************************
+
+infobox(action=define,progress,lower=1,upper=nsteps) 'PANEL ESTIMATIONS - INTERACTIONS'
+
+smpl 1//start npanel//end
+
+comp ppp = 0
+
+do j=1,nsteps
+
+   smpl 1//start npanel//end
+   clear sweeps(1)
+   clear resids1
+   clear resids2
+
+   set VARb = PGDP{-j+1}-PGDP{1}
+
+   * Sweep short-run dynamics of control variables (slope heterogeneity)
+
+   sweep(group=%indiv(t),variance=hetero,series=sweeps,smpl=PLPSMPL)
+   # VARb
+   # constant PFCP{1 to lagLP} PGDP{1 to lagLP} PCTR(1){1 to lagLP} PCTR(2){1 to lagLP} PCTR(3){1 to lagLP} PCTR(4)
+
+   comp NoSW = %nreg
+
+   *******************************************************
+
+   * Pooled Mean Group estimation (+ correction for 2SLS and clustered standard errors)
+   * 1) Estimate second stage based on first stage forecasts
+   * 2) Recalculate residuals taking into account first stage errors (= simple 2SLS)
+   * 3) Cluster standard errors
+
+
+   linreg(smpl=PLPSMPL,noprint,dfc=NoSW) sweeps(1) / resids1
+   # PCON3FCT_SH PCON3
+
+   comp Hinv = %XX
+   comp Xlist = %reglist()
+   comp nXs = %nreg
+   dim Uit(nXs) St(nXs)
+
+   linreg(create,smpl=PLPSMPL,noprint) sweeps(1) / resids2
+   # PCON3FCPCT PCON3
+
+   do i=1,nXs
+      set Uit(i) = xlist(i){0}*resids2
+      panel(tsum=1.0) Uit(i) / St(i)
+   end do i
+
+   mcov(center,noprint,lwindow=neweywest,lags=j+1) startLP endLP
+   # St(1) to St(nXs)
+   comp VtimeL = Hinv*%CMOM*Hinv
+
+   linreg(noprint,create,coeffs=%beta,covmat=VtimeL,form=chisquared,smpl=PLPSMPL) sweeps(1)
+   # xlist
+
+   do k=1,ncon
+      set IRCON3((k-1)*6+1,1) j j = %beta(k)
+      set IRCON3((k-1)*6+2,1) j j = %beta(k) + per1*%stderrs(k)
+      set IRCON3((k-1)*6+3,1) j j = %beta(k) - per1*%stderrs(k)
+      set IRCON3((k-1)*6+4,1) j j = %beta(k) + per2*%stderrs(k)
+      set IRCON3((k-1)*6+5,1) j j = %beta(k) - per2*%stderrs(k)
+      set IRCON3((k-1)*6+6,1) j j = %nobs
+   end do k
+
+   panel(group=%indiv(t),icount=1.0,compress) %resids / bcount
+
+
+   comp ppp = ppp+1
+   infobox(current=ppp)
+
+end do j
+infobox(action=remove)
+
+****************************************************************************************
+****************************************************************************************
+
+dec rect[series] IRCON4(6*(ncon),1)
+
+* Generate interaction variables
+
+smpl 1//start npanel//end
+
+do i=2,ncon
+   statistics(noprint) PCON4(i)
+   comp stdvpdep(i) = sqrt(%variance)
+   set PCON4(i) = (PCON4(i)-%mean)/stdvpdep(i)
+end do i
+
+do i=1,ncon
+   set PCON4FCT_SH(i) = PCON4(i)*FCT_SH(1)
+   set PCON4FCPCT(i) = PCON4(i)*RESFCPCT(1)
+end do i
+
+
+*******************************************************
+
+infobox(action=define,progress,lower=1,upper=nsteps) 'PANEL ESTIMATIONS - INTERACTIONS'
+
+smpl 1//start npanel//end
+
+comp ppp = 0
+
+do j=1,nsteps
+
+   smpl 1//start npanel//end
+   clear sweeps(1)
+   clear resids1
+   clear resids2
+
+   set VARb = PGDP{-j+1}-PGDP{1}
+
+   * Sweep short-run dynamics of control variables (slope heterogeneity)
+
+   sweep(group=%indiv(t),variance=hetero,series=sweeps,smpl=PLPSMPL)
+   # VARb
+   # constant PFCP{1 to lagLP} PGDP{1 to lagLP} PCTR(1){1 to lagLP} PCTR(2){1 to lagLP} PCTR(3){1 to lagLP} PCTR(4)
+
+   comp NoSW = %nreg
+
+   *******************************************************
+
+   * Pooled Mean Group estimation (+ correction for 2SLS and clustered standard errors)
+   * 1) Estimate second stage based on first stage forecasts
+   * 2) Recalculate residuals taking into account first stage errors (= simple 2SLS)
+   * 3) Cluster standard errors
+
+
+   linreg(smpl=PLPSMPL,noprint,dfc=NoSW) sweeps(1) / resids1
+   # PCON4FCT_SH PCON4
+
+   comp Hinv = %XX
+   comp Xlist = %reglist()
+   comp nXs = %nreg
+   dim Uit(nXs) St(nXs)
+
+   linreg(create,smpl=PLPSMPL,noprint) sweeps(1) / resids2
+   # PCON4FCPCT PCON4
+
+   do i=1,nXs
+      set Uit(i) = xlist(i){0}*resids2
+      panel(tsum=1.0) Uit(i) / St(i)
+   end do i
+
+   mcov(center,noprint,lwindow=neweywest,lags=j+1) startLP endLP
+   # St(1) to St(nXs)
+   comp VtimeL = Hinv*%CMOM*Hinv
+
+   linreg(noprint,create,coeffs=%beta,covmat=VtimeL,form=chisquared,smpl=PLPSMPL) sweeps(1)
+   # xlist
+
+   do k=1,ncon
+      set IRCON4((k-1)*6+1,1) j j = %beta(k)
+      set IRCON4((k-1)*6+2,1) j j = %beta(k) + per1*%stderrs(k)
+      set IRCON4((k-1)*6+3,1) j j = %beta(k) - per1*%stderrs(k)
+      set IRCON4((k-1)*6+4,1) j j = %beta(k) + per2*%stderrs(k)
+      set IRCON4((k-1)*6+5,1) j j = %beta(k) - per2*%stderrs(k)
+      set IRCON4((k-1)*6+6,1) j j = %nobs
+   end do k
+
+   panel(group=%indiv(t),icount=1.0,compress) %resids / bcount
+
+
+   comp ppp = ppp+1
+   infobox(current=ppp)
+
+end do j
+infobox(action=remove)
+
+****************************************************************************************
+****************************************************************************************
+
+dec rect[series] IRCON5(6*(ncon),1)
+
+* Generate interaction variables
+
+smpl 1//start npanel//end
+
+do i=2,ncon
+   statistics(noprint) PCON5(i)
+   comp stdvpdep(i) = sqrt(%variance)
+   set PCON5(i) = (PCON5(i)-%mean)/stdvpdep(i)
+end do i
+
+do i=1,ncon
+   set PCON5FCT_SH(i) = PCON5(i)*FCT_SH(1)
+   set PCON5FCPCT(i) = PCON5(i)*RESFCPCT(1)
+end do i
+
+
+*******************************************************
+
+infobox(action=define,progress,lower=1,upper=nsteps) 'PANEL ESTIMATIONS - INTERACTIONS'
+
+smpl 1//start npanel//end
+
+comp ppp = 0
+
+do j=1,nsteps
+
+   smpl 1//start npanel//end
+   clear sweeps(1)
+   clear resids1
+   clear resids2
+
+   set VARb = PGDP{-j+1}-PGDP{1}
+
+   * Sweep short-run dynamics of control variables (slope heterogeneity)
+
+   sweep(group=%indiv(t),variance=hetero,series=sweeps,smpl=PLPSMPL)
+   # VARb
+   # constant PFCP{1 to lagLP} PGDP{1 to lagLP} PCTR(1){1 to lagLP} PCTR(2){1 to lagLP} PCTR(3){1 to lagLP} PCTR(4)
+
+   comp NoSW = %nreg
+
+   *******************************************************
+
+   * Pooled Mean Group estimation (+ correction for 2SLS and clustered standard errors)
+   * 1) Estimate second stage based on first stage forecasts
+   * 2) Recalculate residuals taking into account first stage errors (= simple 2SLS)
+   * 3) Cluster standard errors
+
+
+   linreg(smpl=PLPSMPL,noprint,dfc=NoSW) sweeps(1) / resids1
+   # PCON5FCT_SH PCON5
+
+   comp Hinv = %XX
+   comp Xlist = %reglist()
+   comp nXs = %nreg
+   dim Uit(nXs) St(nXs)
+
+   linreg(create,smpl=PLPSMPL,noprint) sweeps(1) / resids2
+   # PCON5FCPCT PCON5
+
+   do i=1,nXs
+      set Uit(i) = xlist(i){0}*resids2
+      panel(tsum=1.0) Uit(i) / St(i)
+   end do i
+
+   mcov(center,noprint,lwindow=neweywest,lags=j+1) startLP endLP
+   # St(1) to St(nXs)
+   comp VtimeL = Hinv*%CMOM*Hinv
+
+   linreg(noprint,create,coeffs=%beta,covmat=VtimeL,form=chisquared,smpl=PLPSMPL) sweeps(1)
+   # xlist
+
+   do k=1,ncon
+      set IRCON5((k-1)*6+1,1) j j = %beta(k)
+      set IRCON5((k-1)*6+2,1) j j = %beta(k) + per1*%stderrs(k)
+      set IRCON5((k-1)*6+3,1) j j = %beta(k) - per1*%stderrs(k)
+      set IRCON5((k-1)*6+4,1) j j = %beta(k) + per2*%stderrs(k)
+      set IRCON5((k-1)*6+5,1) j j = %beta(k) - per2*%stderrs(k)
+      set IRCON5((k-1)*6+6,1) j j = %nobs
+   end do k
+
+   panel(group=%indiv(t),icount=1.0,compress) %resids / bcount
+
+
+   comp ppp = ppp+1
+   infobox(current=ppp)
+
+end do j
+infobox(action=remove)
+
+****************************************************************************************
+****************************************************************************************
+
+smpl 1 nsteps
+
+spgraph(vfields=2,hfields=4,header="Impact of interaction on GDP - separately")
+do i=1,1
+   graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=2,number=0,header="PMG") 5
+   # IRPMG(1,i) / 4
+   # IRPMG(2,i) / 1
+   # IRPMG(3,i) / 1
+   # IRPMG(4,i) / 8
+   # IRPMG(5,i) / 8
+end do i
+do k=2,2
+   graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=2,number=0,header=conlabel(2)) 5
+   # IRCON2((k-1)*6+1,1) / 4
+   # IRCON2((k-1)*6+2,1) / 1
+   # IRCON2((k-1)*6+3,1) / 1
+   # IRCON2((k-1)*6+4,1) / 8
+   # IRCON2((k-1)*6+5,1) / 8
+end do k
+do k=2,2
+   graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=2,number=0,header=conlabel(3)) 5
+   # IRCON3((k-1)*6+1,1) / 4
+   # IRCON3((k-1)*6+2,1) / 1
+   # IRCON3((k-1)*6+3,1) / 1
+   # IRCON3((k-1)*6+4,1) / 8
+   # IRCON3((k-1)*6+5,1) / 8
+end do k
+do k=2,2
+   graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=2,number=0,header=conlabel(4)) 5
+   # IRCON4((k-1)*6+1,1) / 4
+   # IRCON4((k-1)*6+2,1) / 1
+   # IRCON4((k-1)*6+3,1) / 1
+   # IRCON4((k-1)*6+4,1) / 8
+   # IRCON4((k-1)*6+5,1) / 8
+end do k
+do k=2,2
+   graph(min=min,max=max,overlay=fan,ovsamescale,ovcount=2,number=0,header=conlabel(5)) 5
+   # IRCON5((k-1)*6+1,1) / 4
+   # IRCON5((k-1)*6+2,1) / 1
+   # IRCON5((k-1)*6+3,1) / 1
+   # IRCON5((k-1)*6+4,1) / 8
+   # IRCON5((k-1)*6+5,1) / 8
+end do k
+spgraph(done)
+
