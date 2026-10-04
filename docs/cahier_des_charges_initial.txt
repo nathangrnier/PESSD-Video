@@ -1,0 +1,523 @@
+Je prépare un mémoire de Mastère Spécialisé ENSAE sur :
+
+« Transmission d’un choc de prix des matières premières à l’indice des prix à la consommation : application aux pays de l’UEMOA »
+
+Je veux estimer ensuite sous R des Local Projections sur données mensuelles pour les 8 pays de l’UEMOA :
+- Bénin
+- Burkina Faso
+- Côte d’Ivoire
+- Guinée-Bissau
+- Mali
+- Niger
+- Sénégal
+- Togo
+
+Je joins :
+1. le fichier Excel cible `20261002_final_data_project_research_UEMOA.xlsx`
+2. tous les fichiers de données brutes collectés auprès de BCEAO EDEN, FAOSTAT, FAO, World Bank, ECB, New York Fed et World Bank Pink Sheet
+3. le Bulletin trimestriel des statistiques BCEAO T1 2026.
+
+OBJECTIF
+
+Complète et consolide le fichier `20261002_final_data_project_research_UEMOA.xlsx` à partir de TOUS les fichiers joints.
+
+Ne crée pas une nouvelle architecture inutilement. Conserve autant que possible la structure existante du classeur :
+- Lisez-moi
+- Source
+- Monde
+- BEN
+- BFA
+- CIV
+- GNB
+- MLI
+- NER
+- SEN
+- TGO
+- Annuel
+- Pays
+- Data
+- Suivi
+- Controle
+- Parametres
+
+Le résultat doit être un fichier Excel propre, documenté, cohérent et directement exploitable ensuite dans R.
+
+==================================================
+1. PRINCIPES GÉNÉRAUX
+==================================================
+
+- Ne jamais remplacer une donnée manquante par zéro.
+- Ne pas interpoler automatiquement les observations manquantes.
+- Conserver les données brutes en NIVEAU. Les transformations économétriques seront effectuées dans R.
+- Conserver autant que possible les flags/statuts des données FAOSTAT.
+- Harmoniser toutes les dates mensuelles sous une forme cohérente.
+- Détecter les doublons.
+- Détecter les trous de séries.
+- Identifier les éventuelles ruptures de base des indices de prix.
+- Ne pas mélanger deux séries de bases différentes sans le documenter.
+- Ne pas inventer de données.
+- En cas de conflit entre sources, conserver les deux séries plutôt que d’en écraser une.
+- Documenter précisément la source de chaque variable dans l’onglet `Source`.
+- Ne pas supprimer les formules ou paramètres utiles déjà présents dans le fichier cible.
+- Préserver autant que possible la mise en forme existante.
+
+La période cible est 2000-01 à 2026-09 lorsque les données existent.
+
+L’échantillon économétrique principal sera probablement arrêté à 2024-12 afin d’éviter une rupture liée au passage à la nouvelle base IHPC. Les observations 2025-2026 doivent néanmoins être conservées dans la base pour analyses de robustesse.
+
+==================================================
+2. PRIX DOMESTIQUES, PRIORITÉ BCEAO EDEN
+==================================================
+
+Les fichiers `exportIndicateurs*.csv` viennent de BCEAO EDEN.
+
+Ils contiennent notamment :
+- Indice des prix à la consommation
+- Indice des prix de la fonction alimentation
+
+pour l’UEMOA et/ou les 8 pays.
+
+Pour chaque pays, utiliser comme séries PRINCIPALES :
+
+`cpi_all` = indice BCEAO EDEN des prix à la consommation
+`cpi_food` = indice BCEAO EDEN des prix de la fonction alimentation
+
+Mettre ces séries dans les onglets pays correspondants :
+BEN, BFA, CIV, GNB, MLI, NER, SEN, TGO.
+
+Les données commencent approximativement en 1999 et vont jusqu’en 2026 selon les séries.
+
+Vérifier particulièrement :
+- changements de base
+- valeurs manquantes
+- Guinée-Bissau, notamment la série alimentation
+- éventuelles ruptures en 2025 liées à la base 2023
+
+Ne pas raccorder artificiellement les séries si les bases ne sont pas comparables. Documenter les ruptures.
+
+==================================================
+3. FAOSTAT CPI, SOURCE ALTERNATIVE
+==================================================
+
+Les fichiers FAOSTAT Consumer Price Indices contiennent pour les 8 pays :
+
+- Consumer Prices, General Indices (2015 = 100)
+- Consumer Prices, Food Indices (2015 = 100)
+
+mensuels, approximativement janvier 2000 à mars 2026.
+
+Les conserver comme séries ALTERNATIVES :
+
+`cpi_all_alt`
+`cpi_food_alt`
+
+Ne pas les substituer aux séries BCEAO principales sauf problème clairement identifié.
+
+Conserver également les flags FAOSTAT dans une forme exploitable, par exemple dans `quality_flag` ou dans une table de contrôle séparée.
+
+==================================================
+4. FAO FOOD PRICE INDEX
+==================================================
+
+Le fichier `food_price_indices_data*.csv` contient les indices mensuels FAO.
+
+Importer :
+
+Food Price Index -> `fao_food`
+Cereals -> `fao_cereals`
+Vegetable Oils / Oils -> `fao_oils`
+Sugar -> `fao_sugar`
+Dairy -> `fao_dairy`
+Meat -> `fao_meat`
+
+Utiliser les indices nominaux mensuels, base FAO 2014-2016 = 100.
+
+Les intégrer dans l’onglet `Monde` puis les faire apparaître dans les onglets pays / `Data` selon la structure existante.
+
+==================================================
+5. WORLD BANK PINK SHEET
+==================================================
+
+Le fichier `CMO-Historical-Data-Monthly*.xlsx` est le Pink Sheet mensuel de la Banque mondiale.
+
+Extraire à partir de 2000 :
+
+Crude oil, Brent -> `oil_usd`
+Rice, Thai 5% -> `rice_thai`
+Wheat, US HRW -> `wheat_hrw`
+Palm oil -> `palm_oil`
+Sugar, world -> `sugar_world`
+Maize -> `maize`
+
+Conserver les unités originales et les documenter dans `Source`.
+
+==================================================
+6. TAUX DE CHANGE ECB
+==================================================
+
+Le fichier `ECB Data Portal*.csv` contient la série :
+
+EXR.M.USD.EUR.SP00.A
+
+Il s’agit du taux mensuel moyen USD par EUR.
+
+Importer comme :
+
+`eur_usd`
+
+Puis calculer :
+
+`usd_xof = 655.957 / eur_usd`
+
+car la parité fixe est :
+
+1 EUR = 655.957 FCFA.
+
+Documenter explicitement cette formule.
+
+==================================================
+7. NEW YORK FED GSCPI
+==================================================
+
+Utiliser le fichier `.xlsx` `gscpi_data*.xlsx`.
+
+Dans la feuille contenant les données mensuelles GSCPI, récupérer :
+
+Date
+GSCPI
+
+Importer comme :
+
+`gscpi`
+
+La série couvre approximativement janvier 1998 à août 2026.
+
+Ne pas utiliser l’ancien fichier `.xls` si le `.xlsx` équivalent est disponible.
+
+==================================================
+8. PRODUCTION CÉRÉALIÈRE FAOSTAT
+==================================================
+
+Dans le fichier FAOSTAT correspondant à la production agricole, filtrer exactement :
+
+Item = `Cereals, primary`
+Element = `Production`
+
+Unité = tonnes.
+
+Récupérer les 8 pays et les années disponibles, notamment 2000-2024.
+
+Importer dans l’onglet `Annuel` comme :
+
+`local_agri_supply_BEN`
+`local_agri_supply_BFA`
+etc.
+
+ou selon la structure déjà prévue dans cet onglet.
+
+Conserver les flags FAOSTAT.
+
+Ne pas utiliser Area harvested ou Yield à la place de Production.
+
+==================================================
+9. DÉPENDANCE AUX IMPORTATIONS CÉRÉALIÈRES
+==================================================
+
+Dans le fichier FAOSTAT Food Security / indicateurs correspondant, utiliser :
+
+`Cereal import dependency ratio (percent) (3-year average)`
+
+pour les 8 pays.
+
+Variable :
+
+`import_dependency`
+
+Attention : la couverture est très inégale selon les pays et certaines observations sont estimées (`E`).
+
+Ne pas extrapoler les séries jusqu’en 2024.
+
+Conserver les observations réellement disponibles et les flags.
+
+Cette variable sera surtout utilisée comme caractéristique structurelle de pays dans des interactions économétriques.
+
+==================================================
+10. PART DES IMPORTATIONS ALIMENTAIRES
+==================================================
+
+Le fichier Banque mondiale :
+
+`API_TM.VAL.FOOD.ZS.UN_DS2_en_csv_v2_404666*.csv`
+
+correspond à :
+
+`Food imports (% of merchandise imports)`
+
+Code :
+`TM.VAL.FOOD.ZS.UN`
+
+Récupérer les 8 pays.
+
+Importer dans `Annuel` comme :
+
+`food_imports_share`
+
+Conserver toutes les observations disponibles à partir de 2000.
+
+Ne pas interpoler les années manquantes.
+
+Conserver les fichiers Metadata comme documentation de la définition et de la source.
+
+==================================================
+11. BCEAO, INDICE DES PRIX DES PRODUITS ALIMENTAIRES IMPORTÉS
+==================================================
+
+Le Bulletin trimestriel BCEAO T1 2026 contient :
+
+Tableau 9.5
+`Produits alimentaires importés dans l'Union`
+
+Il contient notamment :
+- Riz
+- Blé
+- Huile
+- Sucre
+- Lait
+- Indice des prix des produits alimentaires importés
+
+L’indice est exprimé en FCFA et est disponible dans ce bulletin au moins pour les observations mensuelles récentes.
+
+Extraire les observations mensuelles effectivement présentes dans le tableau, notamment 2024-10 à 2026-03, et les placer dans :
+
+`bceao_import_food`
+
+NE PAS inventer une série historique avant la première observation réellement disponible dans les fichiers fournis.
+
+Cette série est une variable de contrôle / robustesse, pas indispensable à l’échantillon principal.
+
+==================================================
+12. INDICE ALIMENTAIRE IMPORTÉ CONSTRUIT
+==================================================
+
+Le classeur cible contient déjà une variable :
+
+`import_food_idx`
+
+et des paramètres / pondérations dans `Parametres`.
+
+Ne pas inventer une nouvelle méthodologie si une formule/pondération est déjà documentée dans le classeur.
+
+Si les pondérations présentes correspondent aux parts suivantes issues du travail BCEAO :
+- riz : 30,5 %
+- blé : 8,6 %
+- huiles : 8,3 %
+- sucre : 5,4 %
+- produits laitiers : 4,4 %
+
+vérifier les formules existantes et construire l’indice uniquement si la méthodologie est suffisamment définie.
+
+Sinon laisser la variable non calculée et documenter ce qui manque.
+
+==================================================
+13. VARIABLES PAYS DÉJÀ PRÉSENTES
+==================================================
+
+Ne pas écraser sans justification les caractéristiques pays déjà renseignées dans l’onglet `Pays`, notamment :
+
+- `coastal`
+- `food_weight`
+- `food_weight_2023`
+- `import_share_cpi`
+- `fuel_adj_freq`
+- élasticités / effets BCEAO déjà présents
+
+Les poids alimentaires historiques existants sont notamment approximativement :
+BEN 37.5
+BFA 50.2
+CIV 29.3
+GNB 60.3
+MLI 58.5
+NER 47.8
+SEN 49.6
+TGO 32.9
+
+Conserver ces valeurs et leur source existante.
+
+==================================================
+14. ONGLET MONDE
+==================================================
+
+Le résultat final doit renseigner autant que possible :
+
+Date
+fao_food
+fao_cereals
+fao_oils
+fao_sugar
+fao_dairy
+fao_meat
+oil_usd
+rice_thai
+wheat_hrw
+palm_oil
+sugar_world
+maize
+eur_usd
+usd_xof
+gscpi
+bceao_import_food
+import_food_idx
+
+Une ligne par mois.
+
+==================================================
+15. ONGLETS PAYS
+==================================================
+
+Chaque onglet pays doit avoir une ligne par mois et inclure autant que possible :
+
+Date
+cpi_all
+cpi_food
+fao_food
+oil_usd
+usd_xof
+fao_cereals
+fao_oils
+fao_sugar
+fao_dairy
+fao_meat
+rice_thai
+wheat_hrw
+palm_oil
+sugar_world
+maize
+eur_usd
+gscpi
+bceao_import_food
+import_food_idx
+cpi_all_alt
+cpi_food_alt
+rain_anom
+quality_flag
+note
+
+Ne pas remplir `rain_anom` si aucune donnée correspondante n’a été fournie.
+
+==================================================
+16. ONGLET DATA
+==================================================
+
+L’onglet `Data` doit constituer un PANEL LONG directement importable dans R :
+
+une observation = pays × mois.
+
+Conserver les 8 pays et tous les mois disponibles.
+
+Inclure au minimum :
+- date
+- country
+- iso3
+- cpi_all
+- cpi_food
+- cpi_all_alt
+- cpi_food_alt
+- fao_food
+- fao_cereals
+- fao_oils
+- fao_sugar
+- fao_dairy
+- fao_meat
+- oil_usd
+- rice_thai
+- wheat_hrw
+- palm_oil
+- sugar_world
+- maize
+- eur_usd
+- usd_xof
+- gscpi
+- bceao_import_food
+- import_food_idx
+- local_agri_supply
+- import_dependency
+- food_imports_share
+- food_weight
+- coastal
+
+Si une variable annuelle est associée aux observations mensuelles, répéter la valeur annuelle sur les 12 mois correspondants, mais NE PAS interpoler entre années.
+
+==================================================
+17. CONTRÔLES DE QUALITÉ
+==================================================
+
+Avant d’exporter le fichier final, effectuer systématiquement :
+
+1. contrôle des doublons pays × mois
+2. contrôle des dates
+3. contrôle des valeurs manquantes
+4. contrôle des valeurs nulles suspectes
+5. contrôle des ruptures de série
+6. contrôle des changements de base
+7. contrôle des valeurs extrêmes
+8. contrôle de la couverture par variable et par pays
+9. contrôle des formules Excel
+10. contrôle de cohérence entre `Monde`, onglets pays et `Data`
+
+Dans `Suivi` ou `Controle`, produire un tableau lisible indiquant pour chaque variable :
+- source
+- première observation
+- dernière observation
+- nombre d’observations non manquantes
+- nombre de valeurs manquantes
+- remarques / problèmes éventuels.
+
+==================================================
+18. IMPORTANT POUR L’ÉCONOMÉTRIE
+==================================================
+
+Ne calcule PAS encore :
+- inflation mensuelle
+- inflation en glissement annuel
+- log-différences
+- chocs positifs/négatifs
+- lags
+- leads
+- Local Projections
+
+Je veux conserver les séries sources en niveau dans Excel.
+
+Toutes les transformations seront faites ensuite dans R.
+
+L’objectif économétrique futur est d’estimer des Local Projections h = 0,...,24 avec :
+- inflation alimentaire puis inflation totale
+- choc FAO
+- effets fixes pays
+- dynamique de l’inflation
+- contrôles taux de change, Brent, GSCPI, etc.
+- asymétrie hausses/baisses
+- hétérogénéité selon `food_weight` et `import_dependency`.
+
+Le fichier Excel doit donc être une BASE DE DONNÉES PROPRE, pas un fichier d’estimation.
+
+==================================================
+19. LIVRABLE
+==================================================
+
+Produis un fichier final :
+
+`20261004_final_data_project_research_UEMOA_consolidated.xlsx`
+
+Conserve le fichier original intact.
+
+Avant de terminer :
+- ouvre le fichier final
+- vérifie qu’il n’est pas corrompu
+- vérifie les feuilles principales
+- vérifie quelques observations aléatoires contre les fichiers sources
+- vérifie que les formules ne renvoient pas #REF!, #VALUE!, #N/A ou autres erreurs Excel
+- indique clairement dans `Lisez-moi` la date de consolidation et les conventions retenues.
+
+Je veux que tu fasses effectivement les modifications dans le fichier Excel et que tu me rendes le fichier final, pas seulement que tu m’expliques comment les faire.
+
+Si un fichier source est ambigu, examine son contenu avant de décider à quelle variable il correspond. Ne déduis pas son contenu uniquement à partir de son nom.
