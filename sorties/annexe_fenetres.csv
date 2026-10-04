@@ -1,0 +1,7 @@
+﻿iso3,variable,debut,fin,motif
+CIV,cpi_all,2008-01,2009-11,"Saut de raccord en 2008-01 : +6,3 % dans EDEN, +1,6 % dans FAOSTAT"
+MLI,cpi_all,2008-01,2009-07,"Saut de raccord en 2008-01 : +4,7 % dans EDEN, +0,6 % dans FAOSTAT"
+NER,cpi_all,2008-01,2009-04,"Saut de raccord en 2008-01 : +3,7 % dans EDEN, -0,1 % dans FAOSTAT ; taux 2008 publié 11,3 %, EDEN 10,5 %"
+GNB,cpi_all,2008-01,2010-03,"Taux 2008 publié par la BCEAO 10,4 % : EDEN 7,3 %, FAOSTAT 10,5 %"
+SEN,cpi_all,2007-08,2010-01,"Creux isolé d'EDEN en 2007-08 (-5,1 % puis +7,0 %) ; taux 2009 et 2010 publiés reproduits par FAOSTAT seul"
+CIV,cpi_food,2008-01,2010-04,"Saut de raccord en 2008-01 : +10,3 % dans EDEN, +2,1 % dans FAOSTAT"
